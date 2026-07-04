@@ -22,7 +22,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	AActor*, KillerActor
 );
 
-UCLASS(ClassGroup=(ARK), meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
 class GASPALS_API UHealthComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -31,49 +31,49 @@ public:
 	UHealthComponent();
 
 	// 最大生命值。玩家、敌人、基地核心和测试目标都可以按实例配置。
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="ARK|Health", meta=(ClampMin="0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Health", meta=(ClampMin="0.0"))
 	float MaxHealth = 100.0f;
 
 	// 生命值变化时触发，UI 和受击反馈可以绑定这个事件。
-	UPROPERTY(BlueprintAssignable, Category="ARK|Health")
+	UPROPERTY(BlueprintAssignable, Category="Health")
 	FOnHealthChangedSignature OnHealthChanged;
 
 	// 死亡时触发，只会触发一次。
-	UPROPERTY(BlueprintAssignable, Category="ARK|Health")
+	UPROPERTY(BlueprintAssignable, Category="Health")
 	FOnDeathSignature OnDeath;
 
 	// 对拥有者造成伤害。返回 true 表示伤害实际生效。
-	UFUNCTION(BlueprintCallable, Category="ARK|Health")
+	UFUNCTION(BlueprintCallable, Category="Health")
 	bool ApplyDamage(float DamageAmount, AActor* DamageCauser = nullptr);
 
 	// 治疗拥有者。死亡后默认不能治疗，后续需要复活逻辑时再单独扩展。
-	UFUNCTION(BlueprintCallable, Category="ARK|Health")
+	UFUNCTION(BlueprintCallable, Category="Health")
 	bool Heal(float HealAmount, AActor* HealCauser = nullptr);
 
 	// 重置生命值，用于测试、复活或重新开始关卡。
-	UFUNCTION(BlueprintCallable, Category="ARK|Health")
+	UFUNCTION(BlueprintCallable, Category="Health")
 	void ResetHealth();
 
-	UFUNCTION(BlueprintPure, Category="ARK|Health")
+	UFUNCTION(BlueprintPure, Category="Health")
 	float GetHealth() const { return CurrentHealth; }
 
-	UFUNCTION(BlueprintPure, Category="ARK|Health")
+	UFUNCTION(BlueprintPure, Category="Health")
 	float GetMaxHealth() const { return MaxHealth; }
 
-	UFUNCTION(BlueprintPure, Category="ARK|Health")
+	UFUNCTION(BlueprintPure, Category="Health")
 	float GetHealthPercent() const;
 
-	UFUNCTION(BlueprintPure, Category="ARK|Health")
+	UFUNCTION(BlueprintPure, Category="Health")
 	bool IsDead() const { return bIsDead; }
 
 protected:
 	virtual void BeginPlay() override;
 
 	// 当前生命值只允许组件内部修改，外部通过 ApplyDamage / Heal / ResetHealth 改变。
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="ARK|Health")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Health")
 	float CurrentHealth = 0.0f;
 
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="ARK|Health")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Health")
 	bool bIsDead = false;
 
 private:

@@ -26,7 +26,7 @@ GASPALS 继续负责：
 - 动画蓝图
 - Rifle Overlay
 
-ARK 本阶段使用 C++ 实现：
+本阶段使用 C++ 实现：
 
 - 战斗组件
 - 武器组件
@@ -65,15 +65,14 @@ C++ 目录建议：
 
 ```text
 Source/GASPALS/
-  ARK/
-    Character/
-    Combat/
-    Weapons/
-    Health/
-    Test/
+  Character/
+  Combat/
+  Weapons/
+  Health/
+  Test/
 ```
 
-如果后续 ARK 代码明显变多，再考虑拆成独立模块或插件。第一阶段先放在当前项目模块里即可。
+如果后续 Gameplay 代码明显变多，再考虑拆成独立模块或插件。第一阶段先放在当前项目模块里即可。
 
 ## 开发顺序
 
@@ -102,7 +101,7 @@ Source/GASPALS/
 
 C++ 类：
 
-- `UARKHealthComponent`
+- `UHealthComponent`
 
 建议继承：
 
@@ -148,7 +147,7 @@ C++ 类：
 
 C++ 类：
 
-- `UARKWeaponDataAsset`
+- `UWeaponDataAsset`
 
 建议继承：
 
@@ -178,7 +177,7 @@ C++ 类：
 
 验收：
 
-- 可以在编辑器中创建 `DA_ARKRifle`。
+- 可以在编辑器中创建 `DA_Rifle`。
 - 能在 DataAsset 中配置伤害、射速、弹匣、射程。
 
 ## 步骤 4：创建武器基类
@@ -187,7 +186,7 @@ C++ 类：
 
 C++ 类：
 
-- `AARKWeaponBase`
+- `AWeaponBase`
 
 建议继承：
 
@@ -228,8 +227,8 @@ C++ 类：
 
 验收：
 
-- `BP_ARKRifle` 可以继承 `AARKWeaponBase`。
-- `BP_ARKRifle` 可以配置 `DA_ARKRifle`。
+- `BP_Rifle` 可以继承 `AWeaponBase`。
+- `BP_Rifle` 可以配置 `DA_Rifle`。
 - 调用 `FireOnce` 会扣弹药。
 - 弹匣为 0 时不能继续开火。
 
@@ -239,7 +238,7 @@ C++ 类：
 
 C++ 类：
 
-- `UARKWeaponComponent`
+- `UWeaponComponent`
 
 建议继承：
 
@@ -269,7 +268,7 @@ C++ 类：
 
 验收：
 
-- `BP_ARKCharacter` 上能添加 `UARKWeaponComponent`。
+- `BP_PlayerCharacter` 上能添加 `UWeaponComponent`。
 - PIE 后能生成默认步枪。
 - 调用组件 `StartFire` 能转发到当前武器。
 
@@ -279,7 +278,7 @@ C++ 类：
 
 C++ 类：
 
-- `UARKCombatComponent`
+- `UCombatComponent`
 
 建议继承：
 
@@ -301,24 +300,24 @@ C++ 类：
 职责：
 
 - 接收角色输入。
-- 找到角色上的 `UARKWeaponComponent`。
+- 找到角色上的 `UWeaponComponent`。
 - 把开火和换弹请求转发给武器组件。
 - 后续扩展相机、Overlay、准星、移动速度修正。
 
 验收：
 
-- `BP_ARKCharacter` 上能添加 `UARKCombatComponent`。
+- `BP_PlayerCharacter` 上能添加 `UCombatComponent`。
 - 输入调用 Combat Component。
 - Combat Component 能找到 Weapon Component。
 - 开火输入最终能触发武器开火。
 
-## 步骤 7：创建 ARK 角色蓝图
+## 步骤 7：创建玩家角色蓝图
 
 目标：不直接改 GASPALS 原始角色，使用子蓝图扩展。
 
 蓝图：
 
-- `BP_ARKCharacter`
+- `BP_PlayerCharacter`
 
 继承：
 
@@ -326,18 +325,18 @@ C++ 类：
 
 添加组件：
 
-- `UARKCombatComponent`
-- `UARKWeaponComponent`
-- 可选：`UARKHealthComponent`
+- `UCombatComponent`
+- `UWeaponComponent`
+- 可选：`UHealthComponent`
 
 配置：
 
-- `UARKWeaponComponent.DefaultWeaponClass = BP_ARKRifle`
+- `UWeaponComponent.DefaultWeaponClass = BP_Rifle`
 - 如果有合适 Socket，设置武器附着 Socket。
 
 验收：
 
-- `BP_ARKCharacter` 可以放进测试地图。
+- `BP_PlayerCharacter` 可以放进测试地图。
 - 移动、跳跃、蹲伏、奔跑、Traversal 正常。
 - BeginPlay 后能拥有默认武器。
 
@@ -347,10 +346,10 @@ C++ 类：
 
 输入资产：
 
-- `IA_ARK_Fire`
-- `IA_ARK_Aim`
-- `IA_ARK_Reload`
-- `IMC_ARK_Combat`
+- `IA_Fire`
+- `IA_Aim`
+- `IA_Reload`
+- `IMC_Combat`
 
 推荐按键：
 
@@ -360,9 +359,9 @@ C++ 类：
 
 接入方式：
 
-- 第一阶段可以在 `BP_ARKCharacter` 中绑定输入到 Combat Component。
+- 第一阶段可以在 `BP_PlayerCharacter` 中绑定输入到 Combat Component。
 - 如果 GASPALS 已有输入初始化流程，优先复用它。
-- 不确定输入上下文时，先在 BeginPlay 添加 `IMC_ARK_Combat` 到 Enhanced Input Local Player Subsystem。
+- 不确定输入上下文时，先在 BeginPlay 添加 `IMC_Combat` 到 Enhanced Input Local Player Subsystem。
 
 验收：
 
@@ -380,7 +379,7 @@ C++ 类：
 - 从玩家相机位置发射射线。
 - 方向使用相机 Forward Vector。
 - 终点为 `Start + Forward * WeaponData.Range`。
-- 命中后检查目标是否有 `UARKHealthComponent`。
+- 命中后检查目标是否有 `UHealthComponent`。
 - 有 Health Component 则调用 `ApplyDamage`。
 
 注意：
@@ -401,16 +400,16 @@ C++ 类：
 
 C++ 类可选：
 
-- `AARKDamageTestTarget`
+- `ADamageTestTarget`
 
 蓝图可选：
 
-- `BP_ARKDamageTestTarget`
+- `BP_DamageTestTarget`
 
 组件：
 
 - Static Mesh
-- `UARKHealthComponent`
+- `UHealthComponent`
 
 死亡表现第一版：
 
@@ -431,14 +430,14 @@ C++ 类可选：
 
 建议：
 
-- 新建或复制地图到 `/Game/ARK/Maps/M_ARK_CombatTest`。
-- 放置 `BP_ARKCharacter`。
+- 新建或复制地图到 `/Game/ARK/Maps/M_CombatTest`。
+- 放置 `BP_PlayerCharacter`。
 - 放置多个测试目标。
 - 保证地图里有足够空间测试移动和射击。
 
 验收：
 
-- PIE 后玩家控制的是 `BP_ARKCharacter`。
+- PIE 后玩家控制的是 `BP_PlayerCharacter`。
 - 场景里能看到测试目标。
 - 开火能命中目标。
 
@@ -459,9 +458,9 @@ C++ 类可选：
 ## 最终验收清单
 
 - [ ] 项目 C++ 编译成功。
-- [ ] `BP_ARKCharacter` 能正常使用 GASPALS 移动能力。
-- [ ] `BP_ARKCharacter` 拥有 Combat、Weapon、Health 组件。
-- [ ] PIE 后角色能自动装备 `BP_ARKRifle`。
+- [ ] `BP_PlayerCharacter` 能正常使用 GASPALS 移动能力。
+- [ ] `BP_PlayerCharacter` 拥有 Combat、Weapon、Health 组件。
+- [ ] PIE 后角色能自动装备 `BP_Rifle`。
 - [ ] 鼠标左键能开火。
 - [ ] 开火会扣除弹匣弹药。
 - [ ] R 键能换弹。
@@ -478,7 +477,7 @@ C++ 类可选：
 
 ## 风险 2：输入覆盖 GASPALS 原有移动
 
-添加 ARK 输入 Mapping Context 时，确认不会影响 GASPALS 的移动、视角、跳跃、蹲伏和奔跑输入。
+添加战斗输入 Mapping Context 时，确认不会影响 GASPALS 的移动、视角、跳跃、蹲伏和奔跑输入。
 
 ## 风险 3：第三人称枪口和准星不一致
 
@@ -493,9 +492,8 @@ C++ 类可选：
 建议本阶段拆成多个 Git 提交：
 
 1. `docs: add phase 1 shooting prototype plan`
-2. `feat: add ARK health component`
-3. `feat: add ARK weapon data and weapon base`
-4. `feat: add ARK combat and weapon components`
-5. `feat: add ARK character and rifle prototype`
+2. `feat: add health component`
+3. `feat: add weapon data and weapon base`
+4. `feat: add combat and weapon components`
+5. `feat: add player character and rifle prototype`
 6. `feat: add hitscan damage test target`
-

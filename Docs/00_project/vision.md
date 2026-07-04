@@ -32,7 +32,7 @@
 第一阶段只验证玩家战斗手感：
 
 - 保留 GASPALS 原有移动、跳跃、蹲伏、奔跑、Traversal 和动画系统。
-- 创建自己的 ARK 角色子类。
+- 创建自己的玩家角色子类。
 - 实现基础持枪、瞄准、开火、换弹。
 - 使用射线检测实现第一版武器命中。
 - 增加简单血量、伤害、死亡逻辑。
@@ -88,24 +88,24 @@ GASPALS 项目基础是蓝图和动画资产，但 ARK 自己的长期玩法系�
 建议分工：
 
 - C++：角色扩展基类、战斗组件、武器组件、生命值组件、武器基类、武器数据、敌人基类、基地核心、波次管理、防御塔、建造物、资源系统。
-- 蓝图：`BP_ARKCharacter`、具体武器蓝图、具体敌人蓝图、具体防御塔蓝图、UI Widget、动画 Montage、音效、VFX、关卡实例。
+- 蓝图：`BP_PlayerCharacter`、具体武器蓝图、具体敌人蓝图、具体防御塔蓝图、UI Widget、动画 Montage、音效、VFX、关卡实例。
 - DataAsset：武器数值、防御塔数值、敌人配置、波次配置。
 
 推荐第一批 C++ 类：
 
-- `AARKCharacter`
-- `UARKCombatComponent`
-- `UARKWeaponComponent`
-- `UARKHealthComponent`
-- `AARKWeaponBase`
-- `UARKWeaponDataAsset`
-- `AARKEnemyBase`
-- `AARKDefenseCore`
-- `AARKWaveManager`
-- `AARKBuildableBase`
-- `AARKTurretBase`
+- `APlayerCharacter`
+- `UCombatComponent`
+- `UWeaponComponent`
+- `UHealthComponent`
+- `AWeaponBase`
+- `UWeaponDataAsset`
+- `AEnemyBase`
+- `ADefenseCore`
+- `AWaveManager`
+- `ABuildableBase`
+- `ATurretBase`
 
-短期可以先让 `BP_ARKCharacter` 继承 GASPALS 的 `CBP_SandboxCharacter`，然后挂载 C++ 组件。不要一开始重写 GASPALS 的移动和动画系统。
+短期可以先让 `BP_PlayerCharacter` 继承 GASPALS 的 `CBP_SandboxCharacter`，然后挂载 C++ 组件。不要一开始重写 GASPALS 的移动和动画系统。
 
 ## 原型成功标准
 

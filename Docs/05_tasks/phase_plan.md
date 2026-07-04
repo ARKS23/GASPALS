@@ -14,19 +14,19 @@
 
 任务：
 
-- [ ] 确认 ARK Gameplay 代码放在当前项目 C++ 模块，或后续独立 ARK 模块。
+- [ ] 确认 Gameplay 代码放在当前项目 C++ 模块，或后续独立 Gameplay 模块。
 - [ ] 创建 `/Game/ARK` 内容目录。
-- [ ] 创建 C++ 组件 `UARKCombatComponent`。
-- [ ] 创建 C++ 组件 `UARKWeaponComponent`。
-- [ ] 创建 C++ 组件 `UARKHealthComponent`。
-- [ ] 创建 C++ 武器基类 `AARKWeaponBase`。
-- [ ] 创建 C++ 武器数据资产 `UARKWeaponDataAsset`。
-- [ ] 创建 `BP_ARKCharacter`，短期继承 GASPALS 的 `CBP_SandboxCharacter`。
-- [ ] 将 C++ 组件挂到 `BP_ARKCharacter`。
-- [ ] 保证 `BP_ARKCharacter` 的移动、跳跃、蹲伏、奔跑、Traversal 正常。
-- [ ] 创建 ARK 输入：开火、瞄准、换弹。
-- [ ] 创建步枪蓝图 `BP_ARKRifle`，继承 `AARKWeaponBase`。
-- [ ] 创建步枪数据资产 `DA_ARKRifle`，基于 `UARKWeaponDataAsset`。
+- [ ] 创建 C++ 组件 `UCombatComponent`。
+- [ ] 创建 C++ 组件 `UWeaponComponent`。
+- [ ] 创建 C++ 组件 `UHealthComponent`。
+- [ ] 创建 C++ 武器基类 `AWeaponBase`。
+- [ ] 创建 C++ 武器数据资产 `UWeaponDataAsset`。
+- [ ] 创建 `BP_PlayerCharacter`，短期继承 GASPALS 的 `CBP_SandboxCharacter`。
+- [ ] 将 C++ 组件挂到 `BP_PlayerCharacter`。
+- [ ] 保证 `BP_PlayerCharacter` 的移动、跳跃、蹲伏、奔跑、Traversal 正常。
+- [ ] 创建战斗输入：开火、瞄准、换弹。
+- [ ] 创建步枪蓝图 `BP_Rifle`，继承 `AWeaponBase`。
+- [ ] 创建步枪数据资产 `DA_Rifle`，基于 `UWeaponDataAsset`。
 - [ ] 实现步枪 Hitscan 开火。
 - [ ] 实现弹匣、备用弹药和换弹。
 - [ ] 创建测试目标并支持扣血死亡。
@@ -64,12 +64,12 @@
 
 任务：
 
-- [ ] 创建 C++ 敌人基类 `AARKEnemyBase`。
-- [ ] 创建敌人蓝图 `BP_ARKEnemyBasic`，继承 `AARKEnemyBase`。
+- [ ] 创建 C++ 敌人基类 `AEnemyBase`。
+- [ ] 创建敌人蓝图 `BP_EnemyBasic`，继承 `AEnemyBase`。
 - [ ] 给敌人添加生命值组件。
 - [ ] 敌人可以被玩家击杀。
-- [ ] 创建 C++ 基地核心 `AARKDefenseCore`。
-- [ ] 创建蓝图 `BP_ARKDefenseCore` 作为需要保护的目标。
+- [ ] 创建 C++ 基地核心 `ADefenseCore`。
+- [ ] 创建蓝图 `BP_DefenseCore` 作为需要保护的目标。
 - [ ] 敌人能沿 NavMesh 移动到基地核心。
 - [ ] 敌人靠近核心后攻击核心。
 - [ ] 核心生命值归零后判定失败。
@@ -86,8 +86,8 @@
 
 任务：
 
-- [ ] 创建 C++ 波次管理器 `AARKWaveManager`。
-- [ ] 创建蓝图 `BP_ARKWaveManager` 用于关卡配置。
+- [ ] 创建 C++ 波次管理器 `AWaveManager`。
+- [ ] 创建蓝图 `BP_WaveManager` 用于关卡配置。
 - [ ] 创建敌人出生点。
 - [ ] 配置每波敌人数量和间隔。
 - [ ] 波次结束后进入短暂准备阶段。
@@ -106,9 +106,9 @@
 
 任务：
 
-- [ ] 创建 C++ 可建造物基类 `AARKBuildableBase`。
-- [ ] 创建 C++ 防御塔基类 `AARKTurretBase`。
-- [ ] 创建蓝图 `BP_ARKTurretBasic`，继承 `AARKTurretBase`。
+- [ ] 创建 C++ 可建造物基类 `ABuildableBase`。
+- [ ] 创建 C++ 防御塔基类 `ATurretBase`。
+- [ ] 创建蓝图 `BP_TurretBasic`，继承 `ATurretBase`。
 - [ ] 炮塔自动搜索范围内敌人。
 - [ ] 炮塔自动攻击敌人。
 - [ ] 炮塔攻击复用伤害系统。
