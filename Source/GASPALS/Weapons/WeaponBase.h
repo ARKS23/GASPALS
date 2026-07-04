@@ -9,6 +9,7 @@ class USceneComponent;
 class USkeletalMeshComponent;
 class UWeaponDataAsset;
 
+// 弹药变化事件：UI 可以绑定它刷新弹匣、备用弹药和换弹状态。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
 	FOnWeaponAmmoChangedSignature,
 	AWeaponBase*, Weapon,
@@ -19,6 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWeaponSimpleSignature, AWeaponBase*, Weapon);
 
+// 命中事件只在射线实际命中时触发，用于命中特效、命中音效或命中反馈。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnWeaponHitSignature,
 	AWeaponBase*, Weapon,
@@ -26,6 +28,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 );
 
 // 武器基类负责运行时武器状态，不负责玩家输入绑定。
+// 输入应由 Combat/Weapon Component 转发进来，这样玩家、敌人、防御塔都能复用同一套武器逻辑。
 UCLASS(Blueprintable)
 class GASPALS_API AWeaponBase : public AActor
 {
@@ -63,6 +66,7 @@ public:
 	UFUNCTION(BlueprintPure, Category="Weapon|Fire")
 	bool CanFire() const;
 
+	// 开始换弹，只进入换弹状态；真正补弹由 FinishReload 在计时结束后执行。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Reload")
 	bool StartReload();
 
@@ -131,9 +135,11 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Ammo")
 	bool bIsReloading = false;
 
+	// 记录玩家是否仍然按住开火键，全自动武器的定时器会读取这个状态。
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Fire")
 	bool bWantsToFire = false;
 
+	// 上一次成功开火的世界时间，用来限制射速。
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Fire")
 	float LastFireTime = -1000000.0f;
 
@@ -144,6 +150,7 @@ protected:
 	virtual FVector GetMuzzleLocation() const;
 	virtual AActor* GetDamageCauser() const;
 
+	// 给蓝图表现层的扩展点。C++ 只负责逻辑，动画、VFX、复杂音效可以在子蓝图里处理。
 	UFUNCTION(BlueprintImplementableEvent, Category="Weapon|Events")
 	void ReceiveWeaponFired(const FHitResult& HitResult, bool bHit);
 
@@ -157,6 +164,7 @@ protected:
 	void ReceiveReloadFinished();
 
 private:
+	// 自动开火和换弹都通过 Timer 驱动，避免给武器开启 Tick。
 	FTimerHandle AutoFireTimerHandle;
 	FTimerHandle ReloadTimerHandle;
 

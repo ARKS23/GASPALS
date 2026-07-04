@@ -13,6 +13,7 @@
 
 AWeaponBase::AWeaponBase()
 {
+	// 武器状态由输入、换弹 Timer 和开火 Timer 驱动，不需要每帧 Tick。
 	PrimaryActorTick.bCanEverTick = false;
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
@@ -20,6 +21,7 @@ AWeaponBase::AWeaponBase()
 
 	WeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("WeaponMesh"));
 	WeaponMesh->SetupAttachment(SceneRoot);
+	// 第一阶段武器 Mesh 不参与碰撞，避免枪械模型挡住角色或射线。
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	WeaponMesh->SetGenerateOverlapEvents(false);
 }
@@ -33,6 +35,7 @@ void AWeaponBase::BeginPlay()
 
 void AWeaponBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// Actor 销毁或关卡切换时清理 Timer，避免回调已销毁对象。
 	ClearAutoFireTimer();
 
 	if (UWorld* World = GetWorld())
@@ -45,6 +48,7 @@ void AWeaponBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AWeaponBase::InitializeWeapon()
 {
+	// 重新初始化时先清理所有运行中状态，保证换武器或重置时不会继承旧 Timer。
 	ClearAutoFireTimer();
 
 	if (UWorld* World = GetWorld())
@@ -67,6 +71,7 @@ void AWeaponBase::InitializeWeapon()
 	const int32 MagazineSize = FMath::Max(0, WeaponData->MagazineSize);
 	const int32 MaxReserveAmmo = FMath::Max(0, WeaponData->MaxReserveAmmo);
 
+	// 第一版默认出生时弹匣满弹，备用弹药由 DataAsset 配置并限制在最大值内。
 	CurrentAmmoInMagazine = MagazineSize;
 	CurrentReserveAmmo = FMath::Clamp(WeaponData->InitialReserveAmmo, 0, MaxReserveAmmo);
 
@@ -91,6 +96,7 @@ bool AWeaponBase::StartFire()
 {
 	bWantsToFire = true;
 
+	// 按下开火时先立即打一发，全自动的后续射击再由 Timer 按射速触发。
 	const bool bFired = FireOnce();
 
 	if (WeaponData && WeaponData->IsAutomatic() && !bIsReloading && CurrentAmmoInMagazine > 0)
@@ -128,6 +134,7 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 {
 	if (!CanFire())
 	{
+		// 弹匣为空时触发空枪反馈；射速限制或换弹中失败不播放空枪。
 		if (WeaponData && !bIsReloading && CurrentAmmoInMagazine <= 0)
 		{
 			HandleDryFire();
@@ -148,6 +155,7 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 		return false;
 	}
 
+	// 只有真正通过 CanFire 的射击才扣弹和刷新射速时间。
 	LastFireTime = World->GetTimeSeconds();
 	CurrentAmmoInMagazine = FMath::Max(0, CurrentAmmoInMagazine - 1);
 	BroadcastAmmoChanged();
@@ -158,6 +166,7 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 	FCollisionQueryParams QueryParams(TEXT("WeaponTrace"), true, this);
 	QueryParams.AddIgnoredActor(this);
 
+	// 不命中武器自身、持有者和 Instigator，避免第三人称相机射线打到自己。
 	if (AActor* OwnerActor = GetOwner())
 	{
 		QueryParams.AddIgnoredActor(OwnerActor);
@@ -175,6 +184,7 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 	{
 		if (AActor* HitActor = HitResult.GetActor())
 		{
+			// 第一阶段直接找 HealthComponent 扣血；后续可替换为 UE Damage 或 Gameplay Effect。
 			if (UHealthComponent* HealthComponent = HitActor->FindComponentByClass<UHealthComponent>())
 			{
 				HealthComponent->ApplyDamage(WeaponData->Damage, GetDamageCauser());
@@ -195,6 +205,7 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 
 bool AWeaponBase::CanFire() const
 {
+	// CanFire 只判断逻辑条件，不播放反馈，方便 UI 或组件安全查询。
 	if (!WeaponData || !WeaponData->IsValidWeaponData() || bIsReloading || CurrentAmmoInMagazine <= 0)
 	{
 		return false;
@@ -220,6 +231,7 @@ bool AWeaponBase::StartReload()
 	ClearAutoFireTimer();
 	bIsReloading = true;
 
+	// 换弹开始就广播状态，UI 可以立刻显示 Reloading，而不是等补弹完成。
 	BroadcastAmmoChanged();
 	OnReloadStarted.Broadcast(this);
 	ReceiveReloadStarted();
@@ -233,6 +245,7 @@ bool AWeaponBase::StartReload()
 
 	if (UWorld* World = GetWorld())
 	{
+		// 换弹时间结束后才真正转移弹药，便于中途打断或后续接动画通知。
 		World->GetTimerManager().SetTimer(ReloadTimerHandle, this, &AWeaponBase::FinishReload, WeaponData->ReloadTime, false);
 	}
 	else
@@ -261,6 +274,7 @@ void AWeaponBase::FinishReload()
 		const int32 AmmoNeeded = FMath::Max(0, MagazineSize - CurrentAmmoInMagazine);
 		const int32 AmmoToLoad = FMath::Min(AmmoNeeded, CurrentReserveAmmo);
 
+		// 只补足弹匣缺口，不会凭空增加超过备用弹药的子弹。
 		CurrentAmmoInMagazine += AmmoToLoad;
 		CurrentReserveAmmo -= AmmoToLoad;
 	}
@@ -313,6 +327,7 @@ bool AWeaponBase::GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirectio
 
 	if (Controller)
 	{
+		// 第三人称射击优先使用玩家视角做逻辑射线，保证准星指哪打哪。
 		FRotator ViewRotation = FRotator::ZeroRotator;
 		Controller->GetPlayerViewPoint(OutTraceStart, ViewRotation);
 		OutTraceDirection = ViewRotation.Vector();
@@ -321,6 +336,7 @@ bool AWeaponBase::GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirectio
 
 	if (const AActor* OwnerActor = GetOwner())
 	{
+		// 非玩家武器或没有 Controller 时，退回拥有者位置和朝向。
 		OutTraceStart = OwnerActor->GetActorLocation();
 		OutTraceDirection = OwnerActor->GetActorForwardVector();
 		return !OutTraceDirection.IsNearlyZero();
@@ -340,6 +356,7 @@ FVector AWeaponBase::ApplySpreadToDirection(const FVector& TraceDirection) const
 	}
 
 	const float SpreadRadians = FMath::DegreesToRadians(WeaponData->SpreadAngle);
+	// VRandCone 用角度圆锥模拟基础散布，后续可替换为更可控的后坐力/扩散曲线。
 	return FMath::VRandCone(NormalizedDirection, SpreadRadians);
 }
 
@@ -361,6 +378,7 @@ FVector AWeaponBase::GetMuzzleLocation() const
 
 AActor* AWeaponBase::GetDamageCauser() const
 {
+	// 伤害来源优先归到持有者，方便后续统计击杀、资源奖励或仇恨来源。
 	if (AActor* OwnerActor = GetOwner())
 	{
 		return OwnerActor;
@@ -376,6 +394,7 @@ AActor* AWeaponBase::GetDamageCauser() const
 
 void AWeaponBase::HandleAutoFire()
 {
+	// Timer 回调时再次检查状态，防止换弹、松开按键或换数据后继续开火。
 	if (!bWantsToFire || !WeaponData || !WeaponData->IsAutomatic())
 	{
 		ClearAutoFireTimer();
@@ -439,6 +458,7 @@ void AWeaponBase::DrawTraceDebug(const FVector& TraceStart, const FVector& Trace
 	}
 
 	const float Duration = WeaponData->DebugTraceDuration;
+	// 未命中时画到理论终点；命中时只画到 ImpactPoint，便于判断阻挡物。
 	const FVector DebugEnd = bHit ? HitResult.ImpactPoint : TraceEnd;
 	const FColor LineColor = bHit ? FColor::Red : FColor::Green;
 
