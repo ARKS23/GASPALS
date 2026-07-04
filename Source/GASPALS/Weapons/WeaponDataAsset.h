@@ -1,8 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataAsset.h"
 #include "Engine/EngineTypes.h"
-#include "Engine/PrimaryDataAsset.h"
 #include "WeaponDataAsset.generated.h"
 
 class UAnimMontage;

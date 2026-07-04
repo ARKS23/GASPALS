@@ -1,4 +1,4 @@
-#include "Weapons/WeaponDataAsset.h"
+#include "WeaponDataAsset.h"
 
 #include "Internationalization/Text.h"
 
