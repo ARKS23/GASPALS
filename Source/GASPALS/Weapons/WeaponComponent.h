@@ -37,7 +37,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	void DestroyCurrentWeapon();
 
-	// 当 Socket 或 Mesh 配置调整后，可以手动重新附着当前武器。
+	// 当启用 bAttachWeaponActorToOwner 且 Socket 或 Mesh 配置调整后，可以手动重新附着当前武器。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	bool ReattachCurrentWeapon();
 
@@ -50,6 +50,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Weapon|Reload")
 	bool Reload();
+	
+	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
+	bool AttachWeaponToOwner(AWeaponBase* Weapon) const;
 
 	UFUNCTION(BlueprintPure, Category="Weapon|Equipment")
 	bool HasWeapon() const;
@@ -88,6 +91,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
 	FName WeaponAttachSocketName = NAME_None;
 
+	// 是否把逻辑武器 Actor 直接附着到拥有者身上。
+	// 默认关闭：玩家角色优先复用 GASPALS 的 OverlayPose -> AttachObjectToHand 表现链路，避免出现两把枪。
+	// 敌人、防御塔或非 GASPALS 角色如果需要显示这个武器 Actor，可以在蓝图中打开。
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
+	bool bAttachWeaponActorToOwner = false;
+
 	// 原型阶段默认销毁卸下的武器，避免场景里残留无主武器 Actor。
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
 	bool bDestroyCurrentWeaponOnUnequip = true;
@@ -103,7 +112,7 @@ protected:
 private:
 	// 内部辅助函数保持私有，避免外部绕过装备流程直接生成或附着武器。
 	AWeaponBase* SpawnWeapon(TSubclassOf<AWeaponBase> WeaponClass) const;
-	bool AttachWeaponToOwner(AWeaponBase* Weapon) const;
+	void ApplyLogicalWeaponPresentation(AWeaponBase* Weapon) const;
 	FName ResolveAttachSocketName(const AWeaponBase* Weapon) const;
 	void BroadcastCurrentWeaponChanged(AWeaponBase* OldWeapon, AWeaponBase* NewWeapon);
 };

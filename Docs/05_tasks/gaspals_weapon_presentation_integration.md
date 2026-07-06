@@ -1,14 +1,65 @@
-# GASPALS 武器表现层接入
+# 复用 GASPALS Overlay 武器表现
 
-## 目标
+## 结论
 
-本文档指导第一阶段射击原型如何最大化复用 GASPALS 已有的 Overlay、Attach 和动画逻辑。
+可以复用 GASPALS 原有的 `CHT_OverlayPoses`。
 
-核心目标不是重写 GASPALS 的装备表现系统，而是让自己的 C++ 战斗系统只负责 Gameplay 逻辑，再由 `BP_PlayerCharacter` 把逻辑状态同步给 GASPALS 原有表现流程。
+正确方式不是让 `UCombatComponent` 或 `UWeaponComponent` 直接调用 `CHT_OverlayPoses`，也不是直接调用 `AttachObjectToHand`。正确方式是：
 
-## 总体原则
+```text
+自己的武器逻辑发生变化
+  -> BP_PlayerCharacter 设置 GASPALS 原有 OverlayPose 状态
+    -> 调用 GASPALS 原有 UpdateOverlayPose
+      -> GASPALS 内部 Evaluate Chooser: CHT_OverlayPoses
+        -> Get Layer Data
+          -> AttachObjectToHand
+          -> 设置动画层、武器 Mesh、Socket、过渡动画
+```
 
-GASPALS 已经实现了较完整的第三人称表现层：
+也就是说，我们要复用的是 GASPALS 的“状态驱动表现”链路，而不是绕过这条链路去手动挂武器。
+
+## 当前问题判断
+
+你现在已经接入了 `UCombatComponent` 和 `UWeaponComponent`，但表现效果不对，通常不是 C++ 开火逻辑的问题，而是表现层没有正确走 GASPALS 的 Overlay 链路。
+
+常见原因：
+
+- 只生成了 `BP_Rifle` 逻辑武器，但没有切换 GASPALS 的 `OverlayPose`。
+- 切换了 `OverlayPose`，但没有调用 `UpdateOverlayPose`。
+- `CHT_OverlayPoses` 没有匹配到 Rifle 对应数据。
+- `CHT_OverlayPoses` 匹配到了数据，但 Layer Data 里的 Mesh、Socket、Weapon Anim Class 不正确。
+- `BP_Rifle` 自己的 `WeaponMesh` 和 GASPALS `AttachObjectToHand` 同时显示，导致双武器或位置错乱。
+- `WeaponComponent` 自动装备发生太早，蓝图还没绑定 `OnCurrentWeaponChanged`。
+
+## 系统边界
+
+## C++ 负责 Gameplay
+
+`UCombatComponent`：
+
+- 接输入。
+- 管理是否能战斗。
+- 管理是否瞄准。
+- 转发开火、停火、换弹请求。
+
+`UWeaponComponent`：
+
+- 生成并持有当前逻辑武器。
+- 管理 `CurrentWeapon`。
+- 通知当前武器变化。
+- 转发开火、停火、换弹到 `AWeaponBase`。
+
+`AWeaponBase`：
+
+- 弹药。
+- 射速。
+- 换弹。
+- Hitscan。
+- 伤害。
+
+## GASPALS 负责表现
+
+`CBP_SandboxCharacter` 里已有的逻辑负责：
 
 - `UpdateOverlayPose`
 - `OnRep_OverlayPose`
@@ -17,415 +68,562 @@ GASPALS 已经实现了较完整的第三人称表现层：
 - `AttachObjectToHand`
 - Overlay Animation Blueprint
 - Weapon Animation Blueprint
-- Transition 动画播放
+- Transition 动画
+- 武器 Mesh 挂到手上
 
-这些逻辑应继续保留并复用。
+第一阶段不要重写这些。
 
-自己的 C++ 系统负责：
+## BP_PlayerCharacter 负责适配
 
-- 当前装备的逻辑武器
-- 开火
-- 停火
-- 换弹
-- 弹药状态
-- Hitscan
-- 伤害
-- 战斗输入协调
+`BP_PlayerCharacter` 是桥接层：
 
-GASPALS 蓝图系统负责：
+```text
+C++ 武器状态
+  -> BP_PlayerCharacter
+    -> GASPALS OverlayPose
+      -> UpdateOverlayPose
+```
 
-- 武器外观挂到手上
-- Overlay Pose 切换
-- 武器动画蓝图切换
-- 手部 Socket 配置
-- 装备/切换过渡动画
-- 第三人称角色动作表现
+不要把这层适配写进 `CBP_SandboxCharacter` 原始蓝图。`CBP_SandboxCharacter` 尽量作为 GASPALS 基础角色保留。
 
 ## 推荐调用关系
 
-推荐调用链分成两条：Gameplay 逻辑链和表现同步链。
-
-Gameplay 逻辑链：
+## 装备武器
 
 ```text
-输入
-  -> UCombatComponent
-    -> UWeaponComponent
-      -> AWeaponBase
-        -> UHealthComponent
+BP_PlayerCharacter BeginPlay
+  -> 绑定 WeaponComponent.OnCurrentWeaponChanged
+  -> WeaponComponent.EquipWeapon(BP_Rifle)
+    -> WeaponComponent.CurrentWeapon = BP_Rifle
+    -> OnCurrentWeaponChanged
+      -> BP_PlayerCharacter.ApplyWeaponPresentation(BP_Rifle)
+        -> 设置 GASPALS OverlayPose = Rifle 对应状态
+        -> 调用 UpdateOverlayPose
+          -> CHT_OverlayPoses
+          -> AttachObjectToHand
 ```
 
-表现同步链：
+如果继续使用 `WeaponComponent.bEquipDefaultWeaponOnBeginPlay = true`，要在 BeginPlay 之后主动补一次：
 
 ```text
-UWeaponComponent.OnCurrentWeaponChanged
-  -> BP_PlayerCharacter.ApplyWeaponPresentation
-    -> 设置 GASPALS OverlayPose
-      -> UpdateOverlayPose
-        -> CHT_OverlayPoses
-          -> Get Layer Data
-            -> AttachObjectToHand
-              -> 播放 Transition 动画
+Event BeginPlay
+  -> Bind OnCurrentWeaponChanged
+  -> GetCurrentWeapon
+  -> ApplyWeaponPresentation(CurrentWeapon)
 ```
 
-这两条链路不要混在一起。Gameplay 层不要直接调用 `AttachObjectToHand`，表现层也不要直接处理伤害和弹药规则。
+更推荐第一阶段改成：
 
-## 推荐职责分工
+```text
+WeaponComponent.bEquipDefaultWeaponOnBeginPlay = false
+```
 
-## `AWeaponBase`
+然后在 `BP_PlayerCharacter.BeginPlay` 中：
 
-职责：
+```text
+Bind OnCurrentWeaponChanged
+  -> EquipWeapon(BP_Rifle)
+```
 
-- 保存运行时弹药状态。
-- 执行 `StartFire`、`StopFire`、`StartReload`。
-- 按 `UWeaponDataAsset` 执行射速、射程、伤害等逻辑。
-- 执行 Hitscan 并调用目标的 `UHealthComponent`。
+这样事件不会错过。
 
-不负责：
+## 开火
 
-- 设置 GASPALS Overlay。
-- 调用 `AttachObjectToHand`。
-- 修改角色动画蓝图。
-- 绑定玩家输入。
+```text
+IA_Fire Started
+  -> CombatComponent.StartFire
+    -> WeaponComponent.StartFire
+      -> AWeaponBase.StartFire
+```
 
-## `UWeaponComponent`
+开火不应该调用 `UpdateOverlayPose`。开火表现后续可以通过 `AWeaponBase.OnWeaponFired` 或动画 Montage 处理。
 
-职责：
+## 停火
 
-- 生成并持有当前逻辑武器。
-- 管理 `CurrentWeapon`。
-- 转发开火、停火、换弹请求。
-- 通过 `OnCurrentWeaponChanged` 通知蓝图表现层。
+```text
+IA_Fire Completed / Canceled
+  -> CombatComponent.StopFire
+    -> WeaponComponent.StopFire
+      -> AWeaponBase.StopFire
+```
 
-不负责：
+## 瞄准
 
-- 判断输入语义。
-- 播放 GASPALS 装备动画。
-- 直接调用 `CBP_SandboxCharacter` 的蓝图函数。
+```text
+IA_Aim Started
+  -> CombatComponent.SetAiming(true)
+    -> OnAimingChanged
+      -> BP_PlayerCharacter 处理相机、准星、瞄准表现
+```
 
-## `UCombatComponent`
+瞄准是否需要切换 GASPALS Overlay，要看 GASPALS 的数据设计。如果 `CHT_OverlayPoses` 只区分 Rifle、Pistol、Unarmed，则瞄准不一定改 OverlayPose；如果它有 Aim/RifleAim 状态，才切换对应 OverlayPose。
 
-职责：
+## 换弹
 
-- 接收角色输入请求。
-- 管理是否允许战斗。
-- 管理是否瞄准。
-- 把开火、停火、换弹请求转发给 `UWeaponComponent`。
-- 通过瞄准事件通知蓝图表现层调整相机、准星或 Overlay。
+```text
+IA_Reload Started
+  -> CombatComponent.Reload
+    -> WeaponComponent.Reload
+      -> AWeaponBase.StartReload
+```
 
-不负责：
+换弹动画可以后续通过：
 
-- 生成武器。
-- 附着武器外观。
-- 做射线检测。
-- 扣血。
+- `AWeaponBase.OnReloadStarted`
+- `AWeaponBase.OnReloadFinished`
+- `BP_PlayerCharacter` 中的动画 Montage
+- GASPALS Weapon Animation Blueprint
 
-## `BP_PlayerCharacter`
+第一阶段先保证弹药和 Hitscan 闭环。
 
-职责：
+## `CHT_OverlayPoses` 的复用方式
 
-- 继承 GASPALS 的 `CBP_SandboxCharacter`。
-- 添加 `UCombatComponent`、`UWeaponComponent`、可选 `UHealthComponent`。
-- 接收 C++ 组件事件。
-- 调用 GASPALS 原有的 `UpdateOverlayPose` 和相关表现逻辑。
-- 作为 C++ Gameplay 层和 GASPALS 表现层之间的适配层。
+`CHT_OverlayPoses` 本质是 GASPALS 根据当前角色状态选择一份 Overlay Layer Data。
 
-这是最关键的一层。不要把适配逻辑写回 GASPALS 原始蓝图，优先放在自己的子蓝图里。
+从截图看，`UpdateOverlayPose` 的流程是：
 
-## 推荐蓝图函数
+```text
+UpdateOverlayPose
+  -> Evaluate Chooser: CHT_OverlayPoses
+    -> Get Layer Data
+      -> Overlay Animation Blueprint
+      -> Static Mesh
+      -> Skeletal Mesh
+      -> Weapon Animation Blueprint
+      -> Left Hand
+      -> Socket Name
+    -> AttachObjectToHand
+    -> Play Slot Animation as Dynamic Montage
+```
 
-在 `BP_PlayerCharacter` 中新增一个函数：
+所以你要做的是让 `Evaluate Chooser: CHT_OverlayPoses` 能选中 Rifle 那一行或那一份数据。
+
+不要在 C++ 里直接操作 `CHT_OverlayPoses`。让 GASPALS 自己的 `UpdateOverlayPose` 去评估它。
+
+## 蓝图适配函数
+
+在 `BP_PlayerCharacter` 中创建：
 
 ```text
 ApplyWeaponPresentation
 ```
 
-输入建议：
+输入：
 
 ```text
 NewWeapon: AWeaponBase Object Reference
 ```
 
-职责：
-
-1. 判断 `NewWeapon` 是否有效。
-2. 读取 `NewWeapon -> WeaponData`。
-3. 根据武器类型或配置决定要切换到哪个 GASPALS Overlay Pose。
-4. 设置角色的 Overlay Pose 变量。
-5. 调用 `UpdateOverlayPose`。
-6. 必要时隐藏逻辑武器 Actor 自己的 Mesh，避免手上出现两把枪。
-
-第一版可以先硬判断：
+第一版逻辑：
 
 ```text
-如果 NewWeapon 是 BP_Rifle
-  -> 设置 OverlayPose = Rifle
-  -> 调用 UpdateOverlayPose
+Branch IsValid(NewWeapon)
+  False:
+    设置 GASPALS OverlayPose = Unarmed 或默认状态
+    调用 UpdateOverlayPose
+
+  True:
+    获取 NewWeapon.WeaponData
+    判断 WeaponData.WeaponType
+    如果 WeaponType == Rifle:
+      设置 GASPALS OverlayPose = Rifle 对应状态
+      调用 UpdateOverlayPose
 ```
 
-后续更推荐让 `UWeaponDataAsset` 增加表现层字段，例如：
+如果暂时不好从蓝图读取 `WeaponData.WeaponType`，可以先硬判断：
+
+```text
+NewWeapon IsA BP_Rifle
+  -> 设置 OverlayPose = Rifle
+  -> UpdateOverlayPose
+```
+
+硬判断只适合第一阶段。后续应改成数据驱动。
+
+## 更推荐的数据驱动方案
+
+后续建议在 `UWeaponDataAsset` 增加一个表现层字段：
 
 ```text
 OverlayPoseName
-OverlayType
 ```
 
-这样 `BP_PlayerCharacter` 不需要判断具体蓝图类，只根据数据资产配置切换表现。
-
-## 推荐事件绑定
-
-在 `BP_PlayerCharacter` 的 BeginPlay 或组件事件绑定处：
+或者：
 
 ```text
-WeaponComponent.OnCurrentWeaponChanged
-  -> ApplyWeaponPresentation(NewWeapon)
+OverlayPoseTag
+PresentationId
 ```
 
-瞄准输入：
+用途：
 
 ```text
-IA_Aim Pressed
-  -> CombatComponent.SetAiming(true)
-
-IA_Aim Released
-  -> CombatComponent.SetAiming(false)
+DA_Rifle.OverlayPoseName = Rifle
 ```
 
-开火输入：
+然后 `ApplyWeaponPresentation` 不再判断 `BP_Rifle`，而是：
 
 ```text
-IA_Fire Started
-  -> CombatComponent.StartFire
-
-IA_Fire Completed / Canceled
-  -> CombatComponent.StopFire
+NewWeapon
+  -> WeaponData
+    -> OverlayPoseName
+      -> 设置 GASPALS OverlayPose
+      -> UpdateOverlayPose
 ```
 
-换弹输入：
+如果 GASPALS 的 `OverlayPose` 是枚举，就使用对应枚举值。如果是 Gameplay Tag、Name 或 Data Asset 引用，就保持和 GASPALS 原字段一致。
 
-```text
-IA_Reload Started
-  -> CombatComponent.Reload
-```
+不要为了自己的武器系统重新发明一套 Overlay 枚举，优先贴合 GASPALS 已经使用的类型。
 
-不要让输入直接调用 `AWeaponBase`。
+## 具体蓝图步骤
 
-## 关于武器 Mesh 的处理
-
-如果最大化复用 GASPALS，推荐第一阶段采用：
-
-```text
-AWeaponBase / BP_Rifle = 逻辑武器
-GASPALS Overlay Layer Data = 表现武器
-```
-
-也就是说：
-
-- `BP_Rifle` 可以不配置正式武器 Mesh。
-- 或者把 `BP_Rifle.WeaponMesh` 设置为隐藏。
-- 真正显示在手上的枪械 Mesh 由 GASPALS 的 `AttachObjectToHand` 挂载。
-- GASPALS 的 Chooser / Layer Data 负责 Static Mesh、Skeletal Mesh、Weapon Anim Class 和 Socket Name。
-
-这样能避免两套 Attach 同时生效导致的“双枪”问题。
-
-如果后续希望 `BP_Rifle` 自己的 Actor Mesh 就是表现武器，则需要调整策略：
-
-- 关闭 GASPALS 的武器 Mesh Attach。
-- 或让 GASPALS 只负责 Overlay 动画，不负责显示 Mesh。
-- 或给 `UWeaponComponent` 增加 `bAttachWeaponActorToOwner` 配置，让 C++ Attach 可关闭。
-
-第一阶段不建议同时启用两套显示武器。
-
-## `UpdateOverlayPose` 的使用方式
-
-GASPALS 的流程大致是：
-
-```text
-设置 OverlayPose
-  -> UpdateOverlayPose
-    -> Evaluate Chooser: CHT_OverlayPoses
-      -> Get Layer Data
-        -> AttachObjectToHand
-        -> Play Slot Animation as Dynamic Montage
-```
-
-`OnRep_OverlayPose` 会调用 `UpdateOverlayPose`，这说明 GASPALS 已经把 Overlay 同步变化和表现刷新封装好了。
-
-单人第一阶段可以直接在本地设置 OverlayPose 后调用 `UpdateOverlayPose`。后续如果做多人，需要确保 OverlayPose 的复制路径仍然走 GASPALS 原本的 `OnRep_OverlayPose`。
-
-## 推荐开发步骤
-
-## 步骤 1：确认 `BP_PlayerCharacter` 继承关系
-
-确保：
+## 步骤 1：确认继承关系
 
 ```text
 BP_PlayerCharacter
   Parent Class = CBP_SandboxCharacter
 ```
 
-不要直接把射击逻辑写进 `CBP_SandboxCharacter`。
+这样 `BP_PlayerCharacter` 可以直接访问或调用父类的：
 
-## 步骤 2：添加组件
+- OverlayPose 相关变量
+- `UpdateOverlayPose`
+- `AttachObjectToHand`
+- GASPALS 已有动画逻辑
 
-在 `BP_PlayerCharacter` 添加：
+如果某些变量或函数在子蓝图里不可访问，先检查它们在 `CBP_SandboxCharacter` 中的访问权限。
 
-```text
-UWeaponComponent
-UCombatComponent
-UHealthComponent 可选
-```
+## 步骤 2：确认 `CHT_OverlayPoses` 有 Rifle 数据
 
-配置：
+打开 GASPALS 的 `CHT_OverlayPoses`，确认存在 Rifle 对应配置。
+
+这份配置至少应有：
+
+- Overlay Animation Blueprint
+- Static Mesh 或 Skeletal Mesh
+- Weapon Animation Blueprint
+- Socket Name
+- Left Hand
+
+如果 Rifle 配置不存在，需要在 GASPALS 的 Overlay 数据里添加或复制一份现有武器配置。
+
+注意：优先不要破坏 GASPALS 原始数据。能在项目侧复制/扩展就复制/扩展；必须改插件资产时，要单独提交并记录原因。
+
+## 步骤 3：配置 `BP_Rifle`
+
+`BP_Rifle` 是逻辑武器。
+
+建议第一阶段：
+
+- `BP_Rifle.WeaponData = DA_Rifle`
+- `BP_Rifle.WeaponMesh` 不配置正式显示 Mesh，或设置隐藏。
+- 由 GASPALS `AttachObjectToHand` 显示真正的枪。
+
+这样避免双武器。
+
+## 步骤 4：配置 `WeaponComponent`
+
+在 `BP_PlayerCharacter` 上：
 
 ```text
 WeaponComponent.DefaultWeaponClass = BP_Rifle
-WeaponComponent.bEquipDefaultWeaponOnBeginPlay = true
 ```
 
-## 步骤 3：配置 GASPALS Overlay 数据
-
-在 GASPALS 的 Overlay Chooser / Layer Data 里确认步枪状态有：
+推荐：
 
 ```text
-Overlay Animation Blueprint
-Static Mesh 或 Skeletal Mesh
-Weapon Animation Blueprint
-Socket Name
-Left Hand
+WeaponComponent.bEquipDefaultWeaponOnBeginPlay = false
 ```
 
-这些数据会被 `AttachObjectToHand` 使用。
-
-## 步骤 4：绑定当前武器变化事件
-
-在 `BP_PlayerCharacter`：
+然后由 `BP_PlayerCharacter.BeginPlay` 控制装备顺序：
 
 ```text
-Event BeginPlay
-  -> Bind Event to WeaponComponent.OnCurrentWeaponChanged
+BeginPlay
+  -> Bind WeaponComponent.OnCurrentWeaponChanged
+  -> WeaponComponent.EquipWeapon(BP_Rifle)
 ```
 
-事件里调用：
+这样能保证装备事件一定被 `BP_PlayerCharacter` 收到。
+
+## 步骤 5：绑定 `OnCurrentWeaponChanged`
 
 ```text
-ApplyWeaponPresentation(NewWeapon)
+WeaponComponent.OnCurrentWeaponChanged
+  -> ApplyWeaponPresentation(NewWeapon)
 ```
 
-如果 `WeaponComponent` 在 BeginPlay 自动装备太早，导致蓝图事件还没绑定，可以选一种方案：
+`ApplyWeaponPresentation` 中不要 Spawn 武器，不要做伤害，不要操作弹药，只处理 GASPALS 表现状态。
 
-- 暂时关闭 `bEquipDefaultWeaponOnBeginPlay`，由 `BP_PlayerCharacter.BeginPlay` 绑定事件后手动调用 `EquipWeapon`。
-- 或在 BeginPlay 绑定后主动调用一次 `ApplyWeaponPresentation(WeaponComponent.GetCurrentWeapon)`。
+## 步骤 6：在 `ApplyWeaponPresentation` 里驱动 GASPALS
 
-第二种更适合第一阶段。
-
-## 步骤 5：接输入到 `UCombatComponent`
-
-输入只调用 `UCombatComponent`：
+蓝图目标流程：
 
 ```text
-Fire Pressed -> StartFire
-Fire Released -> StopFire
-Aim Pressed -> SetAiming(true)
-Aim Released -> SetAiming(false)
-Reload -> Reload
+NewWeapon 有效
+  -> 判断 Rifle
+  -> Set OverlayPose = Rifle
+  -> Call UpdateOverlayPose
 ```
 
-这样后续禁用战斗、死亡、建造模式、UI 模式等逻辑可以统一加在 `UCombatComponent`。
+如果表现没变化，优先检查：
 
-## 验收清单
+- 设置的是否是 `CBP_SandboxCharacter` 原本用于 `CHT_OverlayPoses` 的那个 OverlayPose 变量。
+- 是否真的调用了 `UpdateOverlayPose`。
+- `UpdateOverlayPose` 内 `Evaluate Chooser` 是否选中了 Rifle 数据。
 
-- [ ] `BP_PlayerCharacter` 继承 `CBP_SandboxCharacter`。
-- [ ] `BP_PlayerCharacter` 上有 `UWeaponComponent`。
-- [ ] `BP_PlayerCharacter` 上有 `UCombatComponent`。
-- [ ] `WeaponComponent.DefaultWeaponClass` 指向 `BP_Rifle`。
-- [ ] PIE 后 `WeaponComponent.CurrentWeapon` 有效。
-- [ ] `OnCurrentWeaponChanged` 能触发 `ApplyWeaponPresentation`。
-- [ ] `ApplyWeaponPresentation` 能切换 GASPALS OverlayPose。
-- [ ] `UpdateOverlayPose` 被调用。
-- [ ] `AttachObjectToHand` 能挂载 GASPALS 表现武器。
-- [ ] 手上只出现一把枪。
-- [ ] 开火走 `CombatComponent -> WeaponComponent -> AWeaponBase`。
-- [ ] Debug Line 出现并且弹药减少。
-- [ ] GASPALS 移动、跳跃、Traversal 不受影响。
+## 步骤 7：接输入到 `CombatComponent`
 
-## 常见问题
+```text
+IA_Fire Started -> CombatComponent.StartFire
+IA_Fire Completed / Canceled -> CombatComponent.StopFire
+IA_Aim Started -> CombatComponent.SetAiming(true)
+IA_Aim Completed / Canceled -> CombatComponent.SetAiming(false)
+IA_Reload Started -> CombatComponent.Reload
+```
 
-## 问题 1：手上出现两把枪
+输入不要直接调用：
 
-原因：
+- `BP_Rifle.StartFire`
+- `AttachObjectToHand`
+- `UpdateOverlayPose`
 
-- `BP_Rifle.WeaponMesh` 显示了一把。
-- GASPALS `AttachObjectToHand` 又挂了一把。
+除了装备/切状态时，不要频繁调用 `UpdateOverlayPose`。
+
+## 表现效果不对的排查顺序
+
+## 1. 逻辑武器是否存在
+
+检查：
+
+```text
+WeaponComponent.CurrentWeapon 是否有效
+CurrentWeapon 是否为 BP_Rifle
+BP_Rifle.WeaponData 是否为 DA_Rifle
+```
+
+如果这里无效，先修 `WeaponComponent` 配置。
+
+## 2. 当前武器变化事件是否触发
+
+检查：
+
+```text
+WeaponComponent.OnCurrentWeaponChanged 是否执行
+ApplyWeaponPresentation 是否执行
+```
+
+如果没触发，多半是自动装备发生在绑定事件之前。
 
 处理：
 
-- 第一阶段隐藏 `BP_Rifle.WeaponMesh`。
-- 或不在 `BP_Rifle` 上配置正式 Mesh。
-- 只让 GASPALS 负责显示武器。
-
-## 问题 2：武器逻辑存在，但角色手上没有枪
-
-原因：
-
-- `WeaponComponent.CurrentWeapon` 只代表逻辑武器。
-- GASPALS OverlayPose 没切换。
-- `UpdateOverlayPose` 没被调用。
-- Chooser / Layer Data 里没有配置武器 Mesh 或 Socket。
-
-处理：
-
-- 检查 `ApplyWeaponPresentation` 是否执行。
-- 检查 OverlayPose 是否设置为 Rifle。
-- 检查 `UpdateOverlayPose` 是否被调用。
-- 检查 GASPALS Layer Data 是否有 Mesh 和 Socket Name。
-
-## 问题 3：武器位置不对
-
-原因：
-
-- GASPALS Layer Data 的 Socket Name 不对。
-- 角色骨骼没有对应 Socket。
-- 使用了 C++ Attach 和 GASPALS Attach 的不同 Socket。
-
-处理：
-
-- 优先检查 GASPALS `AttachObjectToHand` 使用的 Socket Name。
-- 保持 `DA_Rifle.EquipSocketName` 与 GASPALS Layer Data 里的 Socket Name 一致。
-- 第一阶段尽量只让 GASPALS 控制表现武器的 Attach。
-
-## 问题 4：输入能触发但不能开火
-
-原因：
-
-- `BP_Rifle.WeaponData` 没配置。
-- `WeaponComponent.DefaultWeaponClass` 没配置。
-- `CombatComponent` 没找到 `WeaponComponent`。
-- 弹匣为 0 或正在换弹。
-
-处理：
-
-- 检查 `BP_Rifle.WeaponData = DA_Rifle`。
-- 检查 `WeaponComponent.CurrentWeapon` 是否有效。
-- 调用或确认 `CombatComponent.FindRequiredComponents`。
-- 查看 `AWeaponBase.CanFire` 返回值。
-
-## 后续建议
-
-等第一阶段跑通后，可以考虑给 `UWeaponDataAsset` 增加表现层字段：
-
 ```text
-OverlayPoseName
-OverlayType
-PresentationId
+关闭 bEquipDefaultWeaponOnBeginPlay
+BeginPlay 中先 Bind，再 EquipWeapon
 ```
 
-然后让 `BP_PlayerCharacter.ApplyWeaponPresentation` 根据数据资产配置选择 GASPALS Overlay，而不是硬判断 `BP_Rifle`。
+## 3. OverlayPose 是否真的改变
 
-也可以给 `UWeaponComponent` 增加：
+检查：
+
+```text
+ApplyWeaponPresentation 中设置的 OverlayPose 是否是 GASPALS 原变量
+设置后的值是否为 Rifle 对应状态
+```
+
+如果你创建了自己的变量，例如 `CurrentWeaponState`，但 `CHT_OverlayPoses` 不读取它，表现不会变。
+
+必须设置 GASPALS 原本 `UpdateOverlayPose` 会读取的状态。
+
+## 4. `UpdateOverlayPose` 是否执行
+
+检查：
+
+```text
+Set OverlayPose 后是否调用 UpdateOverlayPose
+OnRep_OverlayPose 是否只在复制时触发
+```
+
+单人本地测试时，直接 Set 复制变量不一定自动执行 OnRep。最稳做法是：
+
+```text
+Set OverlayPose
+Call UpdateOverlayPose
+```
+
+多人时再走服务器设置和复制路径。
+
+## 5. `CHT_OverlayPoses` 是否选中了正确数据
+
+检查 `UpdateOverlayPose` 里的 `Evaluate Chooser: CHT_OverlayPoses` 输出。
+
+如果没有输出或输出不是 Rifle：
+
+- `OverlayPose` 值不对。
+- Chooser 条件不匹配。
+- Rifle 配置不存在。
+- 角色其他状态影响了 Chooser 选择。
+
+可以临时在蓝图里打印：
+
+```text
+OverlayPose 当前值
+Chooser Result 是否有效
+Layer Data 里的 Mesh / Socket Name
+```
+
+## 6. `AttachObjectToHand` 是否拿到有效数据
+
+检查 Layer Data：
+
+```text
+Static Mesh 或 Skeletal Mesh 至少有一个有效
+Socket Name 有效
+Weapon Animation Blueprint 有效
+Overlay Animation Blueprint 有效
+```
+
+如果 Mesh 为空，手上不会出现武器。
+
+如果 Socket Name 错，武器会挂错位置或退回默认位置。
+
+## 7. 是否出现双武器
+
+如果手上两把枪：
+
+- 一把来自 `BP_Rifle.WeaponMesh`。
+- 一把来自 GASPALS `AttachObjectToHand`。
+
+第一阶段处理方式：
+
+```text
+隐藏 BP_Rifle.WeaponMesh
+只让 GASPALS 显示武器外观
+```
+
+后续可以在 `UWeaponComponent` 加配置：
 
 ```text
 bAttachWeaponActorToOwner
 ```
 
-当使用 GASPALS 表现层时关闭 C++ Attach，让逻辑武器 Actor 只作为状态对象存在。
+当使用 GASPALS 表现层时设为 false。
+
+## 8. 角色动画不对
+
+如果枪显示了，但动作不对：
+
+- `Overlay Animation Blueprint` 不对。
+- `Weapon Animation Blueprint` 不对。
+- `Transition` 动画没播放。
+- `Left Hand` 配置不符合当前武器。
+- Rifle Overlay 与当前移动状态不匹配。
+
+优先检查 `CHT_OverlayPoses` 对应 Rifle 的 Layer Data，而不是 C++ 开火逻辑。
+
+## 推荐短期实现方案
+
+第一阶段最稳方案：
+
+```text
+BP_Rifle = 逻辑武器，不显示正式 Mesh
+DA_Rifle = 武器数值
+CHT_OverlayPoses = 负责 Rifle 表现数据
+BP_PlayerCharacter = 适配层
+```
+
+`BP_PlayerCharacter.BeginPlay`：
+
+```text
+Bind WeaponComponent.OnCurrentWeaponChanged
+WeaponComponent.EquipWeapon(BP_Rifle)
+```
+
+`OnCurrentWeaponChanged`：
+
+```text
+ApplyWeaponPresentation(NewWeapon)
+```
+
+`ApplyWeaponPresentation`：
+
+```text
+如果 NewWeapon 是 BP_Rifle:
+  设置 GASPALS OverlayPose = Rifle
+  调用 UpdateOverlayPose
+否则:
+  设置 GASPALS OverlayPose = 默认/空手
+  调用 UpdateOverlayPose
+```
+
+输入：
+
+```text
+Fire -> CombatComponent
+Aim -> CombatComponent
+Reload -> CombatComponent
+```
+
+## 验收清单
+
+- [ ] `BP_PlayerCharacter` 继承 `CBP_SandboxCharacter`。
+- [ ] `BP_PlayerCharacter` 有 `WeaponComponent`。
+- [ ] `BP_PlayerCharacter` 有 `CombatComponent`。
+- [ ] `WeaponComponent.bEquipDefaultWeaponOnBeginPlay` 已关闭，或 BeginPlay 后主动补了一次 `ApplyWeaponPresentation`。
+- [ ] `WeaponComponent.EquipWeapon(BP_Rifle)` 后 `CurrentWeapon` 有效。
+- [ ] `OnCurrentWeaponChanged` 触发。
+- [ ] `ApplyWeaponPresentation` 执行。
+- [ ] GASPALS 原 `OverlayPose` 被设置为 Rifle。
+- [ ] `UpdateOverlayPose` 被调用。
+- [ ] `CHT_OverlayPoses` 输出 Rifle Layer Data。
+- [ ] `AttachObjectToHand` 拿到有效 Mesh 和 Socket。
+- [ ] 手上只显示一把枪。
+- [ ] 开火仍走 `CombatComponent -> WeaponComponent -> AWeaponBase`。
+- [ ] Debug Line 和扣弹正常。
+
+## 不建议的做法
+
+不要在 `UWeaponComponent` 里直接 Cast 到 `CBP_SandboxCharacter` 并调用 `UpdateOverlayPose`。
+
+不要让 `AWeaponBase` 调用 `AttachObjectToHand`。
+
+不要让输入直接调用 `UpdateOverlayPose`。
+
+不要同时让 `BP_Rifle.WeaponMesh` 和 GASPALS Layer Data 都显示枪。
+
+不要为了自己的武器系统复制一套新的 Overlay 状态机，优先驱动 GASPALS 已有 `OverlayPose`。
+
+## 后续优化
+
+当第一阶段跑通后，可以做两项小优化。
+
+## 优化 1：数据驱动 Overlay
+
+在 `UWeaponDataAsset` 增加：
+
+```text
+OverlayPoseName
+```
+
+或直接使用与 GASPALS 匹配的类型：
+
+```text
+OverlayPose
+```
+
+然后 `ApplyWeaponPresentation` 读取数据资产，不再硬判断 `BP_Rifle`。
+
+## 优化 2：关闭 C++ 武器 Actor Attach
+
+在 `UWeaponComponent` 增加：
+
+```text
+bAttachWeaponActorToOwner
+```
+
+当使用 GASPALS 表现层时：
+
+```text
+bAttachWeaponActorToOwner = false
+```
+
+这样 `BP_Rifle` 完全作为逻辑 Actor 存在，表现全部交给 GASPALS。

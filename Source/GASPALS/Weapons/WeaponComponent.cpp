@@ -57,8 +57,7 @@ AWeaponBase* UWeaponComponent::EquipWeapon(TSubclassOf<AWeaponBase> WeaponClass)
 	}
 
 	CurrentWeapon = NewWeapon;
-	// 附着失败不阻止装备流程，至少保留逻辑引用，方便调试缺失 Mesh/Socket 的问题。
-	AttachWeaponToOwner(NewWeapon);
+	ApplyLogicalWeaponPresentation(NewWeapon);
 
 	// Spawn 后 BeginPlay 通常已经初始化过；这里再调用一次，保证运行时换 WeaponClass 也能重置状态。
 	NewWeapon->InitializeWeapon();
@@ -101,6 +100,11 @@ void UWeaponComponent::DestroyCurrentWeapon()
 
 bool UWeaponComponent::ReattachCurrentWeapon()
 {
+	if (!bAttachWeaponActorToOwner)
+	{
+		return false;
+	}
+
 	return AttachWeaponToOwner(GetCurrentWeapon());
 }
 
@@ -223,6 +227,31 @@ bool UWeaponComponent::AttachWeaponToOwner(AWeaponBase* Weapon) const
 	// 极端情况下没有可附着组件，就把武器放到拥有者位置，保留逻辑可用性。
 	Weapon->SetActorTransform(OwnerActor->GetActorTransform());
 	return false;
+}
+
+void UWeaponComponent::ApplyLogicalWeaponPresentation(AWeaponBase* Weapon) const
+{
+	if (!Weapon)
+	{
+		return;
+	}
+
+	// 逻辑武器始终不参与碰撞，避免阻挡玩家、相机或 Hitscan。
+	Weapon->SetActorEnableCollision(false);
+
+	if (!bAttachWeaponActorToOwner)
+	{
+		// 默认路径：武器 Actor 只承担开火、弹药和伤害逻辑。
+		// 玩家手上的真实显示武器由 GASPALS 的 CHT_OverlayPoses / AttachObjectToHand 负责。
+		Weapon->SetActorHiddenInGame(true);
+		return;
+	}
+
+	// 非 GASPALS 角色、敌人或防御塔可以打开该选项，直接显示并附着逻辑武器 Actor。
+	Weapon->SetActorHiddenInGame(false);
+
+	// 附着失败不阻止装备流程，至少保留逻辑引用，方便调试缺失 Mesh/Socket 的问题。
+	AttachWeaponToOwner(Weapon);
 }
 
 FName UWeaponComponent::ResolveAttachSocketName(const AWeaponBase* Weapon) const
