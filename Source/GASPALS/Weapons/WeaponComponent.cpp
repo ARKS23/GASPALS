@@ -67,6 +67,11 @@ AWeaponBase* UWeaponComponent::EquipWeapon(TSubclassOf<AWeaponBase> WeaponClass)
 	return NewWeapon;
 }
 
+AWeaponBase* UWeaponComponent::EquipDefaultWeapon()
+{
+	return DefaultWeaponClass ? EquipWeapon(DefaultWeaponClass) : nullptr;
+}
+
 void UWeaponComponent::UnequipCurrentWeapon(bool bDestroyWeapon)
 {
 	AWeaponBase* OldWeapon = GetCurrentWeapon();

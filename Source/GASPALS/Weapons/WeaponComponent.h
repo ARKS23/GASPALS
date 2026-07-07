@@ -30,6 +30,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	AWeaponBase* EquipWeapon(TSubclassOf<AWeaponBase> WeaponClass);
 
+	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
+	AWeaponBase* EquipDefaultWeapon();
+
 	// 卸下当前武器。默认销毁武器，适合当前“角色持有一把生成武器”的原型阶段。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	void UnequipCurrentWeapon(bool bDestroyWeapon = true);
