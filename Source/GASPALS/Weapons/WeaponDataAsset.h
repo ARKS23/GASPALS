@@ -27,6 +27,14 @@ enum class EWeaponFireMode : uint8
 	Burst UMETA(DisplayName="Burst")
 };
 
+UENUM(BlueprintType)
+enum class EWeaponTraceMode : uint8
+{
+	CameraView UMETA(DisplayName="Camera View"),
+	MuzzleForward UMETA(DisplayName="Muzzle Forward"),
+	MuzzleToCameraAim UMETA(DisplayName="Muzzle To Camera Aim")
+};
+
 // 武器数据资产只保存配置，不保存当前弹药、换弹中等运行时状态。
 UCLASS(BlueprintType)
 class GASPALS_API UWeaponDataAsset : public UPrimaryDataAsset
@@ -50,6 +58,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire")
 	EWeaponFireMode FireMode = EWeaponFireMode::SemiAuto;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire")
+	EWeaponTraceMode TraceMode = EWeaponTraceMode::MuzzleToCameraAim;
 
 	// 单发基础伤害。暴击、护甲、部位倍率后续在伤害系统里扩展。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire", meta=(ClampMin="0.0", UIMin="0.0"))

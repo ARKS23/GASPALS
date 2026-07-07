@@ -11,6 +11,33 @@
 #include "WeaponDataAsset.h"
 #include "../Health/HealthComponent.h"
 
+namespace
+{
+FCollisionQueryParams MakeWeaponTraceQueryParams(const AWeaponBase* Weapon)
+{
+	FCollisionQueryParams QueryParams(TEXT("WeaponTrace"), true, Weapon);
+
+	if (!Weapon)
+	{
+		return QueryParams;
+	}
+
+	QueryParams.AddIgnoredActor(Weapon);
+
+	if (AActor* OwnerActor = Weapon->GetOwner())
+	{
+		QueryParams.AddIgnoredActor(OwnerActor);
+	}
+
+	if (APawn* InstigatorPawn = Weapon->GetInstigator())
+	{
+		QueryParams.AddIgnoredActor(InstigatorPawn);
+	}
+
+	return QueryParams;
+}
+}
+
 AWeaponBase::AWeaponBase()
 {
 	// 武器状态由输入、换弹 Timer 和开火 Timer 驱动，不需要每帧 Tick。
@@ -122,7 +149,7 @@ bool AWeaponBase::FireOnce()
 	FVector TraceStart = FVector::ZeroVector;
 	FVector TraceDirection = FVector::ForwardVector;
 
-	if (!GetTraceView(TraceStart, TraceDirection))
+	if (!BuildFireTrace(TraceStart, TraceDirection))
 	{
 		return false;
 	}
@@ -163,19 +190,7 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 	const FVector TraceEnd = TraceStart + ShotDirection * WeaponData->Range;
 
 	FHitResult HitResult;
-	FCollisionQueryParams QueryParams(TEXT("WeaponTrace"), true, this);
-	QueryParams.AddIgnoredActor(this);
-
-	// 不命中武器自身、持有者和 Instigator，避免第三人称相机射线打到自己。
-	if (AActor* OwnerActor = GetOwner())
-	{
-		QueryParams.AddIgnoredActor(OwnerActor);
-	}
-
-	if (APawn* InstigatorPawn = GetInstigator())
-	{
-		QueryParams.AddIgnoredActor(InstigatorPawn);
-	}
+	FCollisionQueryParams QueryParams = MakeWeaponTraceQueryParams(this);
 
 	const ECollisionChannel TraceChannel = WeaponData->TraceChannel.GetValue();
 	const bool bHit = World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, TraceChannel, QueryParams);
@@ -347,6 +362,100 @@ bool AWeaponBase::GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirectio
 	return !OutTraceDirection.IsNearlyZero();
 }
 
+bool AWeaponBase::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirection) const
+{
+	if (!WeaponData || WeaponData->TraceMode == EWeaponTraceMode::CameraView)
+	{
+		return GetTraceView(OutTraceStart, OutTraceDirection);
+	}
+
+	FTransform MuzzleTransform;
+	if (!GetMuzzleTransform(MuzzleTransform))
+	{
+		return GetTraceView(OutTraceStart, OutTraceDirection);
+	}
+
+	OutTraceStart = MuzzleTransform.GetLocation();
+
+	FVector MuzzleForward = MuzzleTransform.GetUnitAxis(EAxis::X);
+	if (MuzzleForward.IsNearlyZero())
+	{
+		MuzzleForward = WeaponMesh ? WeaponMesh->GetForwardVector() : GetActorForwardVector();
+	}
+
+	if (WeaponData->TraceMode == EWeaponTraceMode::MuzzleForward)
+	{
+		OutTraceDirection = MuzzleForward;
+		return !OutTraceDirection.IsNearlyZero();
+	}
+
+	FVector AimPoint = FVector::ZeroVector;
+	if (GetCameraAimPoint(AimPoint))
+	{
+		OutTraceDirection = (AimPoint - OutTraceStart).GetSafeNormal();
+		if (!OutTraceDirection.IsNearlyZero())
+		{
+			return true;
+		}
+	}
+
+	OutTraceDirection = MuzzleForward;
+	return !OutTraceDirection.IsNearlyZero();
+}
+
+bool AWeaponBase::GetCameraAimPoint(FVector& OutAimPoint) const
+{
+	FVector CameraStart = FVector::ZeroVector;
+	FVector CameraDirection = FVector::ForwardVector;
+	if (!GetTraceView(CameraStart, CameraDirection))
+	{
+		return false;
+	}
+
+	const FVector NormalizedCameraDirection = CameraDirection.GetSafeNormal();
+	if (NormalizedCameraDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	const float TraceRange = WeaponData ? FMath::Max(0.0f, WeaponData->Range) : 10000.0f;
+	const FVector CameraEnd = CameraStart + NormalizedCameraDirection * TraceRange;
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		OutAimPoint = CameraEnd;
+		return true;
+	}
+
+	FHitResult CameraHit;
+	FCollisionQueryParams QueryParams = MakeWeaponTraceQueryParams(this);
+	const ECollisionChannel TraceChannel = WeaponData ? WeaponData->TraceChannel.GetValue() : ECC_Visibility;
+	const bool bHit = World->LineTraceSingleByChannel(CameraHit, CameraStart, CameraEnd, TraceChannel, QueryParams);
+
+	OutAimPoint = bHit ? CameraHit.ImpactPoint : CameraEnd;
+	return true;
+}
+
+bool AWeaponBase::GetMuzzleTransform(FTransform& OutMuzzleTransform) const
+{
+	if (!WeaponMesh)
+	{
+		OutMuzzleTransform = GetActorTransform();
+		return true;
+	}
+
+	const FName MuzzleSocketName = WeaponData ? WeaponData->MuzzleSocketName : NAME_None;
+	if (!MuzzleSocketName.IsNone() && WeaponMesh->DoesSocketExist(MuzzleSocketName))
+	{
+		OutMuzzleTransform = WeaponMesh->GetSocketTransform(MuzzleSocketName, RTS_World);
+		return true;
+	}
+
+	OutMuzzleTransform = WeaponMesh->GetComponentTransform();
+	return true;
+}
+
 FVector AWeaponBase::ApplySpreadToDirection(const FVector& TraceDirection) const
 {
 	const FVector NormalizedDirection = TraceDirection.GetSafeNormal();
@@ -362,18 +471,13 @@ FVector AWeaponBase::ApplySpreadToDirection(const FVector& TraceDirection) const
 
 FVector AWeaponBase::GetMuzzleLocation() const
 {
-	if (!WeaponMesh)
+	FTransform MuzzleTransform;
+	if (GetMuzzleTransform(MuzzleTransform))
 	{
-		return GetActorLocation();
+		return MuzzleTransform.GetLocation();
 	}
 
-	const FName MuzzleSocketName = WeaponData ? WeaponData->MuzzleSocketName : NAME_None;
-	if (!MuzzleSocketName.IsNone() && WeaponMesh->DoesSocketExist(MuzzleSocketName))
-	{
-		return WeaponMesh->GetSocketLocation(MuzzleSocketName);
-	}
-
-	return WeaponMesh->GetComponentLocation();
+	return GetActorLocation();
 }
 
 AActor* AWeaponBase::GetDamageCauser() const

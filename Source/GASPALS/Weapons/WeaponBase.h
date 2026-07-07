@@ -146,6 +146,9 @@ protected:
 	// 默认从拥有者 Controller 视角取射线，找不到视角时退回到拥有者或武器朝向。
 	virtual bool GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirection) const;
 
+	virtual bool BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirection) const;
+	virtual bool GetCameraAimPoint(FVector& OutAimPoint) const;
+	virtual bool GetMuzzleTransform(FTransform& OutMuzzleTransform) const;
 	virtual FVector ApplySpreadToDirection(const FVector& TraceDirection) const;
 	virtual FVector GetMuzzleLocation() const;
 	virtual AActor* GetDamageCauser() const;
