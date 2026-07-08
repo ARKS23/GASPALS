@@ -364,6 +364,7 @@ bool AWeaponBase::GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirectio
 
 bool AWeaponBase::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirection) const
 {
+	// 模式一 : 摄像机中心射线
 	if (!WeaponData || WeaponData->TraceMode == EWeaponTraceMode::CameraView)
 	{
 		return GetTraceView(OutTraceStart, OutTraceDirection);
@@ -383,12 +384,14 @@ bool AWeaponBase::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirect
 		MuzzleForward = WeaponMesh ? WeaponMesh->GetForwardVector() : GetActorForwardVector();
 	}
 
+	// 模式二： 枪口发射向前射线
 	if (WeaponData->TraceMode == EWeaponTraceMode::MuzzleForward)
 	{
 		OutTraceDirection = MuzzleForward;
 		return !OutTraceDirection.IsNearlyZero();
 	}
 
+	// 模式三： 摄像机射线找目标点，枪口射向目标点方向
 	FVector AimPoint = FVector::ZeroVector;
 	if (GetCameraAimPoint(AimPoint))
 	{
