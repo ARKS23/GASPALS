@@ -86,6 +86,8 @@ Rifle 当前只填一个 `TraceResult`；Shotgun 后续可以填多个。
 
 ### 步骤 2：扩展 WeaponBase
 
+完成状态：已完成（2026-07-10）
+
 修改文件：
 
 ```text
@@ -336,7 +338,7 @@ MuzzleSocketName = Muzzle
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 1 | WeaponShotTypes + WeaponBase.OnWeaponShot | 进行中 |
+| 1 | WeaponShotTypes + WeaponBase.OnWeaponShot | 已完成 |
 | 2 | WeaponPresentationComponent + Niagara 依赖 | 未开始 |
 | 3 | BP_PlayerCharacter 接入 | 未开始 |
 | 4 | DA_Rifle 配置并清理 BP_Rifle 旧逻辑 | 未开始 |

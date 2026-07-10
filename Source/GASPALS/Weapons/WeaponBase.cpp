@@ -86,6 +86,7 @@ void AWeaponBase::InitializeWeapon()
 	bWantsToFire = false;
 	bIsReloading = false;
 	LastFireTime = -1000000.0f;
+	ShotSequence = 0;
 
 	if (!WeaponData)
 	{
@@ -211,6 +212,11 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 
 	PlayFireFeedback();
 	DrawTraceDebug(TraceStart, TraceEnd, HitResult, bHit);
+
+	// 新事件携带完整射击上下文；旧事件保留到蓝图表现逻辑迁移完成。
+	FWeaponShotEvent ShotEvent = BuildSingleTraceShotEvent(TraceStart, TraceEnd, ShotDirection, HitResult, bHit);
+	ShotEvent.ShotSequence = ++ShotSequence;
+	OnWeaponShot.Broadcast(this, ShotEvent);
 
 	OnWeaponFired.Broadcast(this);
 	ReceiveWeaponFired(HitResult, bHit);
@@ -539,6 +545,32 @@ void AWeaponBase::HandleDryFire()
 
 	OnDryFire.Broadcast(this);
 	ReceiveDryFire();
+}
+
+FWeaponShotEvent AWeaponBase::BuildSingleTraceShotEvent(
+	const FVector& TraceStart,
+	const FVector& TraceEnd,
+	const FVector& ShotDirection,
+	const FHitResult& HitResult,
+	bool bHit) const
+{
+	FWeaponTraceResult TraceResult;
+	TraceResult.TraceStart = TraceStart;
+	TraceResult.TraceEnd = bHit ? HitResult.ImpactPoint : TraceEnd;
+	TraceResult.HitResult = HitResult;
+	TraceResult.bHit = bHit;
+
+	FWeaponShotEvent ShotEvent;
+	ShotEvent.AimDirection = ShotDirection;
+	ShotEvent.Traces.Add(MoveTemp(TraceResult));
+
+	// 表现层优先使用 Overlay 视觉枪口；这里保存逻辑枪口，供视觉源未就绪时回退。
+	if (!GetMuzzleTransform(ShotEvent.LogicalMuzzleTransform))
+	{
+		ShotEvent.LogicalMuzzleTransform = FTransform(ShotDirection.Rotation(), TraceStart);
+	}
+
+	return ShotEvent;
 }
 
 void AWeaponBase::PlayFireFeedback() const

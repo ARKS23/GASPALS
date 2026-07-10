@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "WeaponShotTypes.h"
 #include "WeaponBase.generated.h"
 
 class AWeaponBase;
@@ -19,6 +20,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
 );
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWeaponSimpleSignature, AWeaponBase*, Weapon);
+
+// 成功射击事件：表现层通过完整上下文生成枪口火光、Tracer 等反馈。
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnWeaponShotSignature,
+	AWeaponBase*, Weapon,
+	const FWeaponShotEvent&, ShotEvent
+);
 
 // 命中事件只在射线实际命中时触发，用于命中特效、命中音效或命中反馈。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -97,6 +105,11 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
 	FOnWeaponAmmoChangedSignature OnAmmoChanged;
 
+	// 仅在真正完成扣弹、射线和伤害结算后广播；空枪或射速限制不会触发。
+	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
+	FOnWeaponShotSignature OnWeaponShot;
+
+	// 旧的简单开火事件暂时保留，等待蓝图表现逻辑迁移完成后再清理。
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
 	FOnWeaponSimpleSignature OnWeaponFired;
 
@@ -143,6 +156,10 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Fire")
 	float LastFireTime = -1000000.0f;
 
+	// 单把武器运行期间的成功射击序号，只在 OnWeaponShot 广播时递增。
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Fire")
+	int32 ShotSequence = 0;
+
 	// 默认从拥有者 Controller 视角取射线，找不到视角时退回到拥有者或武器朝向。
 	virtual bool GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirection) const;
 
@@ -175,6 +192,12 @@ private:
 	void ClearAutoFireTimer();
 	void BroadcastAmmoChanged();
 	void HandleDryFire();
+	FWeaponShotEvent BuildSingleTraceShotEvent(
+		const FVector& TraceStart,
+		const FVector& TraceEnd,
+		const FVector& ShotDirection,
+		const FHitResult& HitResult,
+		bool bHit) const;
 	void PlayFireFeedback() const;
 	void PlayReloadFeedback() const;
 	void DrawTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, const FHitResult& HitResult, bool bHit) const;
