@@ -34,6 +34,8 @@
 
 ### 步骤 1：新增射击事件数据
 
+完成状态：已完成（2026-07-10）
+
 新增文件：
 
 ```text
@@ -334,7 +336,7 @@ MuzzleSocketName = Muzzle
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 1 | WeaponShotTypes + WeaponBase.OnWeaponShot | 未开始 |
+| 1 | WeaponShotTypes + WeaponBase.OnWeaponShot | 进行中 |
 | 2 | WeaponPresentationComponent + Niagara 依赖 | 未开始 |
 | 3 | BP_PlayerCharacter 接入 | 未开始 |
 | 4 | DA_Rifle 配置并清理 BP_Rifle 旧逻辑 | 未开始 |
