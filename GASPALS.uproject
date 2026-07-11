@@ -40,6 +40,13 @@
 			]
 		},
 		{
+			"Name": "UMGToolSet",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
 			"Name": "ConfigSettingsToolset",
 			"Enabled": true,
 			"TargetAllowList": [

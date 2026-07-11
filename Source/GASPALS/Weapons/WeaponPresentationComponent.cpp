@@ -140,6 +140,7 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 	PlayMuzzleVFX(*WeaponData, ShotEvent);
 	PlayFireSound(*WeaponData, ShotEvent);
 	PlayImpactVFX(*WeaponData, ShotEvent);
+	BroadcastHitConfirmation(ShotEvent);
 }
 
 void UWeaponPresentationComponent::PlayMuzzleVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent)
@@ -306,6 +307,45 @@ void UWeaponPresentationComponent::PlayImpactVFX(
 
 		// Impact 是独立世界效果，不追踪到 ActiveNiagaraComponents，切枪时不主动清除。
 	}
+}
+
+void UWeaponPresentationComponent::BroadcastHitConfirmation(const FWeaponShotEvent& ShotEvent)
+{
+	FWeaponHitConfirmation Confirmation;
+	Confirmation.ShotSequence = ShotEvent.ShotSequence;
+
+	for (const FWeaponTraceResult& TraceResult : ShotEvent.Traces)
+	{
+		// Hit Marker 表示实际伤害确认，不能使用仅代表几何命中的 bHit。
+		if (!TraceResult.bDamageApplied)
+		{
+			if (TraceResult.bKilledTarget)
+			{
+				LogWarningRateLimited(TEXT("射击结果出现 bKilledTarget=true 但 bDamageApplied=false，已忽略该异常确认。"));
+			}
+
+			continue;
+		}
+
+		++Confirmation.DamageHitCount;
+
+		if (TraceResult.bKilledTarget)
+		{
+			++Confirmation.KillCount;
+		}
+	}
+
+	if (Confirmation.DamageHitCount <= 0)
+	{
+		return;
+	}
+
+	// 同一次射击既有普通伤害又有击杀时，只广播一次并让击杀反馈优先。
+	Confirmation.MarkerType = Confirmation.KillCount > 0
+		? EWeaponHitMarkerType::Kill
+		: EWeaponHitMarkerType::Damage;
+
+	OnHitConfirmed.Broadcast(this, Confirmation);
 }
 
 FVector UWeaponPresentationComponent::ResolveFireAudioLocation(const FWeaponShotEvent& ShotEvent) const

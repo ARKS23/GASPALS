@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "WeaponPresentationTypes.h"
 #include "WeaponShotTypes.h"
 #include "WeaponPresentationComponent.generated.h"
 
@@ -10,6 +11,13 @@ class UNiagaraComponent;
 class USkeletalMeshComponent;
 class UWeaponComponent;
 class UWeaponDataAsset;
+class UWeaponPresentationComponent;
+
+// UI 只监听伤害确认结果，不需要依赖武器实例或完整命中数据。
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnWeaponHitConfirmedSignature,
+	UWeaponPresentationComponent*, PresentationComponent,
+	const FWeaponHitConfirmation&, Confirmation);
 
 // 当前武器表现是否具备安全播放条件。
 UENUM(BlueprintType)
@@ -55,6 +63,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Weapon|Presentation")
 	AWeaponBase* GetCurrentWeapon() const { return CurrentWeapon.Get(); }
+
+	// 只有伤害实际生效时才广播；打中墙壁、无敌目标或已死亡目标不会触发。
+	UPROPERTY(BlueprintAssignable, Category="Weapon|Presentation|Hit Marker")
+	FOnWeaponHitConfirmedSignature OnHitConfirmed;
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -111,6 +123,9 @@ private:
 
 	// 根据每条射线的命中点和表面法线播放世界空间 Impact；不依赖视觉枪口状态。
 	void PlayImpactVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
+
+	// 把同一次射击的多条射线汇总成一次 UI 伤害确认，避免未来 Shotgun 重复播放动画。
+	void BroadcastHitConfirmation(const FWeaponShotEvent& ShotEvent);
 
 	// 优先使用 Overlay 视觉枪口，未就绪时回退到逻辑枪口或武器位置。
 	FVector ResolveFireAudioLocation(const FWeaponShotEvent& ShotEvent) const;

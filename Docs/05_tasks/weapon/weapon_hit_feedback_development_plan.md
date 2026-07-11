@@ -18,7 +18,7 @@
 当前缺口：
 
 - `bDamageApplied`、`bKilledTarget` 已写入射击结果，待编辑器运行验证字段值。
-- `ImpactVFX`、`TracerVFX` 已有数据字段，但表现组件尚未消费。
+- 通用 `ImpactVFX` 已接入，`TracerVFX` 尚未消费。
 - 没有 Hit Marker、弹药、准星和生命值 UI。
 
 下一阶段目标链路：
@@ -267,36 +267,88 @@ IWeaponImpactPresentationProvider
 
 ### 步骤 4：实现 Hit Marker
 
-`WeaponPresentationComponent` 可以广播轻量 UI 事件，但不直接创建 Widget：
+完成状态：C++ 事件链已完成，蓝图 Widget 接入与运行验收待完成
 
-```cpp
-OnHitConfirmed(bool bKilledTarget)
+C++ 修改：
+
+```text
+Source/GASPALS/Weapons/WeaponPresentationTypes.h
+Source/GASPALS/Weapons/WeaponPresentationComponent.h
+Source/GASPALS/Weapons/WeaponPresentationComponent.cpp
 ```
 
-规则：
+`WeaponPresentationComponent` 将一次 `ShotEvent` 的全部射线汇总为一个 `FWeaponHitConfirmation`，并广播 `OnHitConfirmed`：
 
 - 只有 `bDamageApplied` 才显示普通 Hit Marker。
 - `bKilledTarget` 使用单独颜色或动画。
 - 打中墙壁只播放 Impact，不显示伤害 Hit Marker。
+- 同一次射击包含多条射线时只广播一次，任意击杀均让 Kill Marker 优先。
+- 表现组件只广播事件，不直接创建或持有 Widget。
 
-蓝图创建一个根战斗 HUD，负责显示和隐藏 Hit Marker。
+Hit Marker 的蓝图接入并入步骤 5，不单独创建临时 HUD。`WBP_HitMarker` 提供 `PlayDamageMarker` 和 `PlayKillMarker`；连续命中时停止旧动画并从头播放，不排队累积。
 
 ### 步骤 5：补齐基础 HUD
 
-建议先使用一个根 Widget，避免第一版拆分过多 UI：
+完成状态：结构设计完成，蓝图资产与运行验收待完成
+
+步骤 5 与步骤 4 的蓝图部分合并实施。游戏 UI 放在项目 `Content`，不修改 GASPALS 插件示例 Widget：
 
 ```text
-Content/UI/WBP_CombatHUD
+Content/UI/Combat/
+├─ WBP_CombatHUD
+├─ Center/WBP_Crosshair
+├─ Center/WBP_HitMarker
+├─ Status/WBP_WeaponStatus
+└─ Status/WBP_PlayerStatus
 ```
 
-包含：
+根 HUD 层级：
 
-- Crosshair。
-- Ammo In Magazine / Reserve Ammo。
-- Player Health。
-- Hit Marker。
+```text
+CanvasPanel_Root
+├─ SafeZone_Status
+│  ├─ WBP_PlayerStatus                 左下角
+│  └─ WBP_WeaponStatus                 右下角
+├─ Overlay_Center                      屏幕中心，固定尺寸
+│  ├─ WBP_Crosshair                    ZOrder 0
+│  └─ WBP_HitMarker                    ZOrder 1
+├─ Overlay_Notifications               后续提示层
+└─ Overlay_FullscreenFeedback          后续受伤/低血量层
+```
 
-绑定事件后必须主动读取一次当前值，因为武器或生命值可能在 Widget 创建前已经初始化并广播。
+职责：
+
+- `WBP_CombatHUD`：保存当前 Pawn/组件引用，统一绑定、解绑并向子 Widget 推送纯 UI 数据。
+- `WBP_Crosshair`：显示固定准心；瞄准时调整间距或透明度，无武器或战斗禁用时隐藏。动态扩散暂缓。
+- `WBP_HitMarker`：普通伤害与击杀动画；它与 Crosshair 同级，避免准心样式变化影响命中反馈。
+- `WBP_WeaponStatus`：显示 `DisplayName`、`FireMode`、弹匣/备用弹药和换弹状态；武器图标待 DataAsset 增加 HUD Icon 后再接入。
+- `WBP_PlayerStatus`：显示当前/最大生命值；护甲和体力在对应业务组件完成后再增加。跨 Pawn 的分数、队伍等数据后续读取 PlayerState。
+
+事件绑定：
+
+```text
+WeaponPresentationComponent.OnHitConfirmed -> WBP_HitMarker
+CombatComponent.OnAimingChanged             -> WBP_Crosshair
+CombatComponent.OnCombatEnabledChanged      -> Crosshair/WeaponStatus 可见性
+WeaponComponent.OnCurrentWeaponChanged      -> 重绑 WeaponBase.OnAmmoChanged
+HealthComponent.OnHealthChanged             -> WBP_PlayerStatus
+```
+
+HUD 使用事件驱动，不使用 UMG Tick 或每帧 Property Binding。绑定事件后必须主动读取一次当前值，避免装备、弹药或生命值在 Widget 创建前已经初始化。
+
+生命周期：
+
+1. 新增项目侧 `BP_PlayerController`，只为本地控制器创建一次 `WBP_CombatHUD` 并调用 `AddToPlayerScreen`。
+2. `OnPossess` 调用 `CombatHUD.InitializeFromPawn(NewPawn)`；`OnUnPossess` 解绑旧 Pawn。
+3. HUD 保存 `BoundWeapon`；换枪时先解绑旧武器 `OnAmmoChanged`，再绑定新武器并立即刷新。
+4. 子 Widget 不直接查找 Character/Component，只接收根 HUD 传入的数值和表现命令。
+
+开发顺序：
+
+1. 创建四个子 Widget 和根 `WBP_CombatHUD`。
+2. 接入 Hit Marker，再接入准心、武器状态和玩家生命值。
+3. 新增 PlayerController 并配置当前 GameMode/关卡使用它。
+4. 验证射空、打墙、伤害、击杀、瞄准、换枪、换弹、卸装和重新 Possess。
 
 ### 步骤 6：开发 Tracer
 
@@ -316,8 +368,8 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 | 2 | Damage/Kill 结果写入 ShotEvent | 进行中（UHT/C++ 已通过） |
 | 3A | 通用 Impact VFX | 已完成（运行验收通过） |
 | 3B | Surface-aware Impact | 已预留 PhysMaterial 数据，完整功能暂缓 |
-| 4 | Hit Marker | 未开始 |
-| 5 | 基础 Combat HUD | 未开始 |
+| 4 | Hit Marker | C++ 已完成，蓝图接入并入步骤 5 |
+| 5 | 基础 Combat HUD | 设计完成，蓝图开发与运行验收待完成 |
 | 6 | Tracer VFX | 未开始 |
 
 ## 4. 验收清单
@@ -333,7 +385,10 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 - [ ] 打中可受伤目标有 Impact 和普通 Hit Marker。
 - [ ] 击杀目标显示击杀反馈，死亡事件只触发一次。
 - [ ] Impact、Hit Marker 和实际伤害结果一致。
+- [ ] 无武器或战斗禁用时准心正确隐藏，瞄准状态能刷新准心。
+- [ ] 换枪后旧武器事件已解绑，弹药和换弹状态不会重复刷新。
 - [ ] Ammo、Health UI 初始化时不会显示默认错误值。
+- [ ] 重新 Possess 后 HUD 能解绑旧 Pawn 并显示新 Pawn 状态。
 - [ ] Tracer 起点来自视觉枪口，终点与实际射线结果一致。
 - [ ] 关闭 Debug Trace 后仍能清楚判断开火、命中和剩余弹药。
 
