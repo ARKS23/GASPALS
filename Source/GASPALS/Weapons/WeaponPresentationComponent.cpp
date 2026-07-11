@@ -2,6 +2,7 @@
 
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -129,12 +130,24 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 	}
 
 	const UWeaponDataAsset* WeaponData = Weapon->GetWeaponData();
-	if (!WeaponData || !WeaponData->MuzzleVFX)
+	if (!WeaponData)
 	{
 		return;
 	}
 
-	UNiagaraSystem* MuzzleSystem = WeaponData->MuzzleVFX.Get();
+	// HandleWeaponShot 只负责事件校验与分发，各类表现独立判断自身资源。
+	PlayMuzzleVFX(*WeaponData, ShotEvent);
+	PlayFireSound(*WeaponData, ShotEvent);
+}
+
+void UWeaponPresentationComponent::PlayMuzzleVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent)
+{
+	if (!WeaponData.MuzzleVFX)
+	{
+		return;
+	}
+
+	UNiagaraSystem* MuzzleSystem = WeaponData.MuzzleVFX.Get();
 
 	UNiagaraComponent* SpawnedComponent = nullptr;
 
@@ -155,14 +168,14 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 		if (SpawnedComponent)
 		{
 			// 先完成局部偏移设置再激活，避免特效第一帧使用 Socket 的原始朝向。
-			SpawnedComponent->SetRelativeTransform(WeaponData->MuzzleVFXRelativeTransform);
+			SpawnedComponent->SetRelativeTransform(WeaponData.MuzzleVFXRelativeTransform);
 		}
 	}
 	else if (bUseLogicalMuzzleFallback && !ShotEvent.LogicalMuzzleTransform.ContainsNaN())
 	{
 		// Fallback 使用相同的局部偏移规则，保证视觉枪口失效前后特效朝向一致。
 		const FTransform SpawnTransform =
-			WeaponData->MuzzleVFXRelativeTransform * ShotEvent.LogicalMuzzleTransform;
+			WeaponData.MuzzleVFXRelativeTransform * ShotEvent.LogicalMuzzleTransform;
 		SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 			GetWorld(),
 			MuzzleSystem,
@@ -190,6 +203,40 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 
 	TrackActiveEffect(SpawnedComponent);
 	SpawnedComponent->Activate(true);
+}
+
+void UWeaponPresentationComponent::PlayFireSound(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent)
+{
+	if (!WeaponData.FireSound)
+	{
+		return;
+	}
+
+	UGameplayStatics::PlaySoundAtLocation(
+		this,
+		WeaponData.FireSound.Get(),
+		ResolveFireAudioLocation(ShotEvent));
+}
+
+FVector UWeaponPresentationComponent::ResolveFireAudioLocation(const FWeaponShotEvent& ShotEvent) const
+{
+	if (IsVisualSourceReady())
+	{
+		return VisualMesh->GetSocketLocation(VisualMuzzleSocket);
+	}
+
+	if (!ShotEvent.LogicalMuzzleTransform.ContainsNaN())
+	{
+		return ShotEvent.LogicalMuzzleTransform.GetLocation();
+	}
+
+	if (IsValid(CurrentWeapon.Get()))
+	{
+		return CurrentWeapon->GetActorLocation();
+	}
+
+	const AActor* OwnerActor = GetOwner();
+	return IsValid(OwnerActor) ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
 }
 
 void UWeaponPresentationComponent::HandleNiagaraSystemFinished(UNiagaraComponent* FinishedComponent)

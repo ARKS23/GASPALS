@@ -198,7 +198,6 @@ private:
 		const FVector& ShotDirection,
 		const FHitResult& HitResult,
 		bool bHit) const;
-	void PlayFireFeedback() const;
 	void PlayReloadFeedback() const;
 	void DrawTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, const FHitResult& HitResult, bool bHit) const;
 };

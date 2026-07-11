@@ -9,6 +9,7 @@ class AWeaponBase;
 class UNiagaraComponent;
 class USkeletalMeshComponent;
 class UWeaponComponent;
+class UWeaponDataAsset;
 
 // 当前武器表现是否具备安全播放条件。
 UENUM(BlueprintType)
@@ -101,6 +102,15 @@ private:
 
 	UFUNCTION()
 	void HandleNiagaraSystemFinished(UNiagaraComponent* FinishedComponent);
+
+	// 播放单次射击的枪口特效；资源为空时安全跳过，不影响后续其他表现。
+	void PlayMuzzleVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
+
+	// 在射击发生的世界位置播放一次性枪声；资源为空时安全跳过。
+	void PlayFireSound(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
+
+	// 优先使用 Overlay 视觉枪口，未就绪时回退到逻辑枪口或武器位置。
+	FVector ResolveFireAudioLocation(const FWeaponShotEvent& ShotEvent) const;
 
 	void SetCurrentWeapon(AWeaponBase* NewWeapon);
 	void UpdatePresentationState();

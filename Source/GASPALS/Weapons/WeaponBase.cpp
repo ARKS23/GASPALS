@@ -210,7 +210,6 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 		OnWeaponHit.Broadcast(this, HitResult);
 	}
 
-	PlayFireFeedback();
 	DrawTraceDebug(TraceStart, TraceEnd, HitResult, bHit);
 
 	// 新事件携带完整射击上下文；旧事件保留到蓝图表现逻辑迁移完成。
@@ -572,15 +571,6 @@ FWeaponShotEvent AWeaponBase::BuildSingleTraceShotEvent(
 
 	return ShotEvent;
 }
-
-void AWeaponBase::PlayFireFeedback() const
-{
-	if (WeaponData && WeaponData->FireSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, WeaponData->FireSound, GetMuzzleLocation());
-	}
-}
-
 void AWeaponBase::PlayReloadFeedback() const
 {
 	if (WeaponData && WeaponData->ReloadSound)
