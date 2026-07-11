@@ -1,7 +1,7 @@
 # 武器表现层开发方案
 
 修订日期：2026-07-11
-状态：Muzzle VFX 和 Fire Sound 已接入，Impact/Tracer 待开发
+状态：Muzzle VFX、Fire Sound 和通用 Impact 已接入，Tracer 待开发
 范围：先完成 Rifle/Pistol 单机表现链路
 
 ## 1. 开发目标
@@ -348,7 +348,7 @@ MuzzleVFXRelativeTransform = 按当前武器与特效组合微调，默认使用
 | 5 | Fire Sound 迁移 | 已完成 |
 | 6 | DamageTestTarget | 已完成 |
 | 7 | Damage/Kill 结果写入 ShotEvent | 进行中（UHT/C++ 已通过） |
-| 8 | 通用 Impact VFX | 进行中（UHT/C++ 已通过） |
+| 8 | 通用 Impact VFX | 已完成（运行验收通过） |
 | 9 | Hit Marker | 未开始 |
 | 10 | Tracer | 未开始 |
 

@@ -192,6 +192,8 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams = MakeWeaponTraceQueryParams(this);
+	// 为后续 Surface-aware Impact 保留 Physical Material；当前通用 Impact 不依赖该数据。
+	QueryParams.bReturnPhysicalMaterial = true;
 
 	const ECollisionChannel TraceChannel = WeaponData->TraceChannel.GetValue();
 	const bool bHit = World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, TraceChannel, QueryParams);

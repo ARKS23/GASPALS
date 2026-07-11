@@ -97,9 +97,11 @@ bool bKilledTarget = false;
 
 ### 步骤 3：实现 Impact VFX
 
-完成状态：进行中（UHT/C++ 编译通过，资源配置、完整链接与运行验收待完成）
+完成状态：3A 已完成并通过运行验收；3B 已完成轻量数据预留，完整功能暂缓
 
 #### 步骤 3A：通用 Impact
+
+完成状态：已完成（2026-07-11，运行验收通过）
 
 修改：
 
@@ -171,6 +173,10 @@ ImpactSurfaceOffset = 1.0 cm 起步
 新增反射字段需要关闭编辑器、完整编译并重新打开后才会出现在 DataAsset 面板中。
 
 #### 步骤 3B：Surface-aware Impact 设计预留
+
+当前只完成命中数据预留：实际开火射线设置 `QueryParams.bReturnPhysicalMaterial = true`，使现有 `FHitResult` 快照能够携带 `PhysMaterial`。通用 Impact 暂不消费该字段，摄像机瞄准辅助射线也不额外请求 Physical Material。
+
+暂不向 `FWeaponTraceResult` 重复写入 `SurfaceType`，也不提前创建空的 Profile、Override 接口或 Subsystem。准备好 Concrete、Metal、Flesh 等差异化资源后，再实现完整解析和资产配置。
 
 当不同材质需要不同表现时，使用 UE Physical Surface，不通过 Cast 判断木箱、铁门或角色类型。
 
@@ -308,8 +314,8 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 | 0 | 现有 VFX/SFX 边界验收 | 进行中 |
 | 1 | DamageTestTarget | 已完成 |
 | 2 | Damage/Kill 结果写入 ShotEvent | 进行中（UHT/C++ 已通过） |
-| 3A | 通用 Impact VFX | 进行中（UHT/C++ 已通过） |
-| 3B | Surface-aware Impact | 设计预留，暂不实现 |
+| 3A | 通用 Impact VFX | 已完成（运行验收通过） |
+| 3B | Surface-aware Impact | 已预留 PhysMaterial 数据，完整功能暂缓 |
 | 4 | Hit Marker | 未开始 |
 | 5 | 基础 Combat HUD | 未开始 |
 | 6 | Tracer VFX | 未开始 |
@@ -317,12 +323,12 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 ## 4. 验收清单
 
 - [x] 测试目标可以被射线命中、扣血并死亡。
-- [ ] 射空不会生成 Impact。
-- [ ] 打中墙壁会在正确位置和朝向生成 Impact。
-- [ ] 打中 DamageTestTarget 会生成 Impact。
-- [ ] 最后一枪目标隐藏后，Impact 仍能使用事件快照正常生成。
-- [ ] 切枪或卸装不会清除已经生成的世界 Impact。
-- [ ] Impact 不会陷入表面、反向发射或因缺少资源中断其他表现。
+- [x] 射空不会生成 Impact。
+- [x] 打中墙壁会在正确位置和朝向生成 Impact。
+- [x] 打中 DamageTestTarget 会生成 Impact。
+- [x] 最后一枪目标隐藏后，Impact 仍能使用事件快照正常生成。
+- [x] 切枪或卸装不会清除已经生成的世界 Impact。
+- [x] Impact 不会陷入表面、反向发射或因缺少资源中断其他表现。
 - [ ] 打中墙壁有 Impact，但没有伤害 Hit Marker。
 - [ ] 打中可受伤目标有 Impact 和普通 Hit Marker。
 - [ ] 击杀目标显示击杀反馈，死亡事件只触发一次。
