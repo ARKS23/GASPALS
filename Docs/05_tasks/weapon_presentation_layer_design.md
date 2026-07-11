@@ -127,7 +127,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 - 全自动 Timer 的每一发都广播一次。
 - 不在这里访问 Overlay Mesh 或播放 Muzzle VFX。
 
-### 步骤 3：添加 Niagara 依赖
+### 步骤 3：添加 Niagara 依赖 (完成)
 
 修改：
 
@@ -142,6 +142,8 @@ PrivateDependencyModuleNames.AddRange(new[] { "Niagara" });
 ```
 
 ### 步骤 4：新增 WeaponPresentationComponent
+
+完成状态：已完成（2026-07-11）
 
 新增文件：
 
@@ -218,7 +220,7 @@ AutoDestroy = true
 PoolingMethod = AutoRelease
 ```
 
-### 步骤 5：调整 WeaponDataAsset
+### 步骤 5：调整 WeaponDataAsset (完成)
 
 修改：
 
@@ -238,7 +240,7 @@ TObjectPtr<UFXSystemAsset> MuzzleVFX;
 TObjectPtr<UNiagaraSystem> MuzzleVFX;
 ```
 
-`TracerVFX / ImpactVFX` 可以同批修改，也可以等后续功能开发时修改。
+`TracerVFX / ImpactVFX` 已同批修改
 
 第一阶段不迁移音效。当前 Fire/DryFire/Reload Sound 继续由 `WeaponBase` 播放，避免重复。
 
@@ -330,16 +332,17 @@ ReceiveWeaponFired
 ```text
 MuzzleVFX = /Game/MuzzleFlash3D/FX/Modern/NS_MuzzleFlash_5
 MuzzleSocketName = Muzzle
+MuzzleVFXRelativeTransform = 按当前武器与特效组合微调，默认使用 Identity
 ```
 
-确认该 Niagara 是一次性效果；如果会循环，需要由表现组件保存返回的 NiagaraComponent 并主动停止。
+该偏移只修正视觉特效，不修改射线使用的逻辑枪口。确认 Niagara 是一次性效果；如果会循环，需要由表现组件保存返回的 NiagaraComponent 并主动停止。
 
 ## 4. 开发顺序与进度
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | 1 | WeaponShotTypes + WeaponBase.OnWeaponShot | 已完成 |
-| 2 | WeaponPresentationComponent + Niagara 依赖 | 未开始 |
+| 2 | WeaponPresentationComponent + Niagara 依赖 | 已完成 |
 | 3 | BP_PlayerCharacter 接入 | 未开始 |
 | 4 | DA_Rifle 配置并清理 BP_Rifle 旧逻辑 | 未开始 |
 | 5 | 音效、Tracer、Impact 后续迁移 | 未开始 |

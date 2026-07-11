@@ -6,8 +6,8 @@
 #include "WeaponDataAsset.generated.h"
 
 class UAnimMontage;
-class UFXSystemAsset;
 class USoundBase;
+class UNiagaraSystem;
 
 UENUM(BlueprintType)
 enum class EWeaponType : uint8
@@ -121,13 +121,17 @@ public:
 	TObjectPtr<USoundBase> ReloadSound = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
-	TObjectPtr<UFXSystemAsset> MuzzleVFX = nullptr;
+	TObjectPtr<UNiagaraSystem> MuzzleVFX = nullptr;
+
+	// 枪口特效相对于视觉 Muzzle Socket 的局部偏移，用于修正特定武器与特效的朝向差异。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
+	FTransform MuzzleVFXRelativeTransform = FTransform::Identity;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
-	TObjectPtr<UFXSystemAsset> ImpactVFX = nullptr;
+	TObjectPtr<UNiagaraSystem> ImpactVFX = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
-	TObjectPtr<UFXSystemAsset> TracerVFX = nullptr;
+	TObjectPtr<UNiagaraSystem> TracerVFX = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Debug")
 	bool bDrawDebugTrace = true;
