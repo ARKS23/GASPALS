@@ -1,5 +1,8 @@
 # 阶段 1：玩家射击原型详细计划
 
+修订日期：2026-07-11
+状态：核心射击、武器表现和测试目标已完成，完整换弹验收待完成
+
 ## 阶段目标
 
 本阶段目标是完成一个最小可玩的第三人称射击闭环：
@@ -374,18 +377,17 @@ C++ 类：
 
 目标：开火能检测命中。
 
-第一版射线方案：
+当前射线方案由 `WeaponData.TraceMode` 配置：
 
-- 从玩家相机位置发射射线。
-- 方向使用相机 Forward Vector。
-- 终点为 `Start + Forward * WeaponData.Range`。
-- 命中后检查目标是否有 `UHealthComponent`。
-- 有 Health Component 则调用 `ApplyDamage`。
+- `CameraView`：从玩家视角直接发射射线。
+- `MuzzleForward`：从逻辑武器 Muzzle Socket 沿枪口前方发射。
+- `MuzzleToCameraAim`：先用相机射线确定目标点，再从逻辑枪口射向目标点；当前 Rifle 默认使用该模式。
+- 命中后检查目标是否有 `UHealthComponent`，存在时调用 `ApplyDamage`。
 
 注意：
 
-- 第三人称游戏优先使用相机方向做逻辑瞄准。
-- 枪口位置第一阶段只做表现，不作为逻辑起点。
+- 第三人称游戏使用相机确定玩家瞄准目标，同时允许逻辑射线从枪口出发。
+- 逻辑武器 Muzzle 与 GASPALS Overlay 视觉 Muzzle 相互独立，表现层不得修改伤害射线。
 - 先开启 Debug Line，方便验证。
 
 验收：
@@ -457,17 +459,17 @@ C++ 类可选：
 
 ## 最终验收清单
 
-- [ ] 项目 C++ 编译成功。
-- [ ] `BP_PlayerCharacter` 能正常使用 GASPALS 移动能力。
-- [ ] `BP_PlayerCharacter` 拥有 Combat、Weapon、Health 组件。
-- [ ] PIE 后角色能自动装备 `BP_Rifle`。
-- [ ] 鼠标左键能开火。
-- [ ] 开火会扣除弹匣弹药。
+- [x] 项目 C++ 编译成功。
+- [x] `BP_PlayerCharacter` 能正常使用 GASPALS 移动能力。
+- [x] `BP_PlayerCharacter` 拥有 Combat、Weapon、Health 组件。
+- [x] PIE 后角色能装备 `BP_Rifle`。
+- [x] 鼠标左键能开火。
+- [x] 开火会扣除弹匣弹药。
 - [ ] R 键能换弹。
-- [ ] Hitscan Debug Line 方向正确。
-- [ ] 测试目标被命中后扣血。
-- [ ] 测试目标生命值归零后死亡。
-- [ ] 没有明显运行时蓝图错误。
+- [x] Hitscan Debug Line 方向正确。
+- [x] 测试目标被命中后扣血。
+- [x] 测试目标生命值归零后死亡。
+- [x] 没有明显运行时蓝图错误。
 
 ## 开发风险
 
@@ -481,7 +483,7 @@ C++ 类可选：
 
 ## 风险 3：第三人称枪口和准星不一致
 
-第一版逻辑命中使用相机射线，枪口只做表现。这样能先保证玩家瞄哪里打哪里。
+当前默认使用 `MuzzleToCameraAim`：相机射线确定瞄准点，逻辑枪口射向该点。需要继续验证近距离遮挡和枪口贴墙时，实际射线与准星反馈是否一致。
 
 ## 风险 4：类一次性做太多
 

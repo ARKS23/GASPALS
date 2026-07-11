@@ -197,7 +197,9 @@ private:
 		const FVector& TraceEnd,
 		const FVector& ShotDirection,
 		const FHitResult& HitResult,
-		bool bHit) const;
+		bool bHit,
+		bool bDamageApplied,
+		bool bKilledTarget) const;
 	void PlayReloadFeedback() const;
 	void DrawTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, const FHitResult& HitResult, bool bHit) const;
 };

@@ -28,6 +28,14 @@ struct GASPALS_API FWeaponTraceResult
 	// 标记本条射线是否命中有效阻挡物，避免表现层依赖 HitResult 内部状态推断。
 	UPROPERTY(BlueprintReadOnly, Category="Weapon|Shot")
 	bool bHit = false;
+
+	// 标记本条射线是否对目标实际造成伤害；命中墙壁或已死亡目标时保持 false。
+	UPROPERTY(BlueprintReadOnly, Category="Weapon|Shot")
+	bool bDamageApplied = false;
+
+	// 标记本条射线是否直接导致目标死亡，不能仅根据目标当前已死亡来推断。
+	UPROPERTY(BlueprintReadOnly, Category="Weapon|Shot")
+	bool bKilledTarget = false;
 };
 
 /**

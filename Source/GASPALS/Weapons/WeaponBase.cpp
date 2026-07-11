@@ -195,6 +195,8 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 
 	const ECollisionChannel TraceChannel = WeaponData->TraceChannel.GetValue();
 	const bool bHit = World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, TraceChannel, QueryParams);
+	bool bDamageApplied = false;
+	bool bKilledTarget = false;
 
 	if (bHit)
 	{
@@ -203,7 +205,10 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 			// 第一阶段直接找 HealthComponent 扣血；后续可替换为 UE Damage 或 Gameplay Effect。
 			if (UHealthComponent* HealthComponent = HitActor->FindComponentByClass<UHealthComponent>())
 			{
-				HealthComponent->ApplyDamage(WeaponData->Damage, GetDamageCauser());
+				bDamageApplied = HealthComponent->ApplyDamage(WeaponData->Damage, GetDamageCauser());
+
+				// 必须确认本次伤害实际生效，避免把已经死亡的目标重复统计为本枪击杀。
+				bKilledTarget = bDamageApplied && HealthComponent->IsDead();
 			}
 		}
 
@@ -213,7 +218,14 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 	DrawTraceDebug(TraceStart, TraceEnd, HitResult, bHit);
 
 	// 新事件携带完整射击上下文；旧事件保留到蓝图表现逻辑迁移完成。
-	FWeaponShotEvent ShotEvent = BuildSingleTraceShotEvent(TraceStart, TraceEnd, ShotDirection, HitResult, bHit);
+	FWeaponShotEvent ShotEvent = BuildSingleTraceShotEvent(
+		TraceStart,
+		TraceEnd,
+		ShotDirection,
+		HitResult,
+		bHit,
+		bDamageApplied,
+		bKilledTarget);
 	ShotEvent.ShotSequence = ++ShotSequence;
 	OnWeaponShot.Broadcast(this, ShotEvent);
 
@@ -551,13 +563,17 @@ FWeaponShotEvent AWeaponBase::BuildSingleTraceShotEvent(
 	const FVector& TraceEnd,
 	const FVector& ShotDirection,
 	const FHitResult& HitResult,
-	bool bHit) const
+	bool bHit,
+	bool bDamageApplied,
+	bool bKilledTarget) const
 {
 	FWeaponTraceResult TraceResult;
 	TraceResult.TraceStart = TraceStart;
 	TraceResult.TraceEnd = bHit ? HitResult.ImpactPoint : TraceEnd;
 	TraceResult.HitResult = HitResult;
 	TraceResult.bHit = bHit;
+	TraceResult.bDamageApplied = bDamageApplied;
+	TraceResult.bKilledTarget = bKilledTarget;
 
 	FWeaponShotEvent ShotEvent;
 	ShotEvent.AimDirection = ShotDirection;

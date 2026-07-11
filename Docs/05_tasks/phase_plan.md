@@ -14,22 +14,22 @@
 
 任务：
 
-- [ ] 确认 Gameplay 代码放在当前项目 C++ 模块，或后续独立 Gameplay 模块。
+- [x] 确认 Gameplay 代码放在当前项目 C++ 模块，或后续独立 Gameplay 模块。
 - [ ] 创建 `/Game/ARK` 内容目录。
-- [ ] 创建 C++ 组件 `UCombatComponent`。
-- [ ] 创建 C++ 组件 `UWeaponComponent`。
-- [ ] 创建 C++ 组件 `UHealthComponent`。
-- [ ] 创建 C++ 武器基类 `AWeaponBase`。
-- [ ] 创建 C++ 武器数据资产 `UWeaponDataAsset`。
-- [ ] 创建 `BP_PlayerCharacter`，短期继承 GASPALS 的 `CBP_SandboxCharacter`。
-- [ ] 将 C++ 组件挂到 `BP_PlayerCharacter`。
-- [ ] 保证 `BP_PlayerCharacter` 的移动、跳跃、蹲伏、奔跑、Traversal 正常。
-- [ ] 创建战斗输入：开火、瞄准、换弹。
-- [ ] 创建步枪蓝图 `BP_Rifle`，继承 `AWeaponBase`。
-- [ ] 创建步枪数据资产 `DA_Rifle`，基于 `UWeaponDataAsset`。
-- [ ] 实现步枪 Hitscan 开火。
-- [ ] 实现弹匣、备用弹药和换弹。
-- [ ] 创建测试目标并支持扣血死亡。
+- [x] 创建 C++ 组件 `UCombatComponent`。
+- [x] 创建 C++ 组件 `UWeaponComponent`。
+- [x] 创建 C++ 组件 `UHealthComponent`。
+- [x] 创建 C++ 武器基类 `AWeaponBase`。
+- [x] 创建 C++ 武器数据资产 `UWeaponDataAsset`。
+- [x] 创建 `BP_PlayerCharacter`，短期继承 GASPALS 的 `CBP_SandboxCharacter`。
+- [x] 将 C++ 组件挂到 `BP_PlayerCharacter`。
+- [x] 保证 `BP_PlayerCharacter` 的移动、跳跃、蹲伏、奔跑、Traversal 正常。
+- [ ] 创建战斗输入：开火已接入，瞄准和换弹待完整验收。
+- [x] 创建步枪蓝图 `BP_Rifle`，继承 `AWeaponBase`。
+- [x] 创建步枪数据资产 `DA_Rifle`，基于 `UWeaponDataAsset`。
+- [x] 实现步枪 Hitscan 开火。
+- [x] 实现弹匣、备用弹药和换弹逻辑。
+- [x] 创建测试目标并支持扣血死亡。
 
 验收标准：
 
@@ -44,10 +44,10 @@
 
 任务：
 
-- [ ] 装备步枪时切换 Rifle Overlay。
-- [ ] 开火时播放枪口火光。
-- [ ] 开火时播放音效。
-- [ ] 命中时显示 Debug 命中点或命中特效。
+- [x] 装备步枪时切换 Rifle Overlay。
+- [x] 开火时播放枪口火光。
+- [x] 开火时播放音效。
+- [x] 命中时显示 Debug 命中点或命中特效。
 - [ ] 添加准星 UI。
 - [ ] 添加弹药 UI。
 - [ ] 添加生命值 UI。
@@ -142,13 +142,15 @@
 
 ## 当前优先级
 
-当前只执行阶段 1。
+当前执行阶段 1 收口和阶段 2 命中反馈，不进入敌人、波次或防御塔开发。
 
 最小目标：
 
-1. C++ 战斗、武器、生命值组件能编译并挂到角色上。
-2. 玩家角色继承 GASPALS 并能正常移动。
-3. 玩家能装备步枪。
-4. 鼠标左键可以开火。
-5. Hitscan 能命中测试目标。
-6. 测试目标能扣血死亡。
+1. 新增可受伤、可死亡的 DamageTestTarget。
+2. 区分几何命中、实际伤害和击杀结果。
+3. 使用 `FWeaponShotEvent.Traces` 播放 Impact VFX。
+4. 添加普通命中和击杀 Hit Marker。
+5. 添加 Ammo、Crosshair、Health 基础 UI。
+6. 完成全自动、空资源、快速装备和换弹打断验收。
+
+详细执行文档：[武器命中反馈开发方案](weapon/weapon_hit_feedback_development_plan.md)。
