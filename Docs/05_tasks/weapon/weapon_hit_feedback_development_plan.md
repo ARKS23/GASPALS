@@ -97,9 +97,14 @@ bool bKilledTarget = false;
 
 ### 步骤 3：实现 Impact VFX
 
+完成状态：进行中（UHT/C++ 编译通过，资源配置、完整链接与运行验收待完成）
+
+#### 步骤 3A：通用 Impact
+
 修改：
 
 ```text
+Source/GASPALS/Weapons/WeaponDataAsset.h
 Source/GASPALS/Weapons/WeaponPresentationComponent.h
 Source/GASPALS/Weapons/WeaponPresentationComponent.cpp
 ```
@@ -112,14 +117,147 @@ void PlayImpactVFX(
     const FWeaponShotEvent& ShotEvent);
 ```
 
-遍历 `ShotEvent.Traces`：
+`HandleWeaponShot` 在 Muzzle VFX 和 Fire Sound 之后调用 `PlayImpactVFX`。遍历 `ShotEvent.Traces`：
 
 - 只处理 `bHit == true`。
+- Impact 判断几何命中，不使用 `bDamageApplied` 或 `bKilledTarget`。
 - 位置使用 `HitResult.ImpactPoint`。
 - 朝向使用 `HitResult.ImpactNormal`。
 - 资源使用 `WeaponData.ImpactVFX`。
+- `ImpactVFX` 为空时安全跳过，不影响其他表现。
+
+建议增加配置：
+
+```cpp
+// Impact 特效相对于表面法线变换的局部偏移。
+FTransform ImpactVFXRelativeTransform = FTransform::Identity;
+
+// 沿表面法线向外偏移，避免粒子与表面重叠闪烁。
+float ImpactSurfaceOffset = 1.0f;
+```
+
+项目需要统一 Niagara 资源朝向。建议 Impact 特效沿局部 `+Z` 发射，世界旋转使用：
+
+```cpp
+FRotationMatrix::MakeFromZ(ImpactNormal).Rotator();
+```
+
+如果现有特效沿局部 `+X` 发射，则通过 `ImpactVFXRelativeTransform` 修正，不在角色或关卡蓝图中逐个调整。
+
+生成位置：
+
+```text
+ImpactPoint + ImpactNormal * ImpactSurfaceOffset
+```
+
+生命周期约束：
+
+- 使用 `SpawnSystemAtLocation` 和 `ENCPoolMethod::AutoRelease`。
+- Impact 是世界效果，不加入枪口使用的 `ActiveNiagaraComponents`。
+- 切枪、卸装或 `ClearVisualSource` 不应清除已经生成的世界 Impact。
+- 目标可能在伤害结算时已经隐藏，必须使用事件保存的 `ImpactPoint / ImpactNormal`，不能重新查询目标 Mesh。
+- 对无效法线、NaN 变换和生成失败进行安全跳过或限频日志。
 
 第一版只做通用 Impact，不引入 Physical Surface 分类或独立 Subsystem。
+
+`DA_Rifle` 运行配置：
+
+```text
+ImpactVFX = 一次性通用 Niagara Impact
+ImpactVFXRelativeTransform = Identity 起步，根据资源发射轴微调
+ImpactSurfaceOffset = 1.0 cm 起步
+```
+
+新增反射字段需要关闭编辑器、完整编译并重新打开后才会出现在 DataAsset 面板中。
+
+#### 步骤 3B：Surface-aware Impact 设计预留
+
+当不同材质需要不同表现时，使用 UE Physical Surface，不通过 Cast 判断木箱、铁门或角色类型。
+
+数据流：
+
+```text
+Mesh Material / Physical Material Override
+-> Physical Material
+-> Surface Type
+-> HitResult.PhysMaterial
+-> Impact Profile
+-> VFX / Sound / Decal
+```
+
+项目设置中规划：
+
+```text
+SurfaceType_Default
+SurfaceType_Concrete
+SurfaceType_Metal
+SurfaceType_Wood
+SurfaceType_Flesh
+SurfaceType_Glass
+SurfaceType_Shield
+```
+
+射线查询需要设置：
+
+```cpp
+QueryParams.bReturnPhysicalMaterial = true;
+```
+
+表面类型通过以下方式解析：
+
+```cpp
+UGameplayStatics::GetSurfaceType(HitResult);
+```
+
+长期新增共享数据资产：
+
+```text
+UWeaponImpactProfileDataAsset
+```
+
+每个表面配置结构建议包含：
+
+```text
+Niagara VFX
+Impact Sound
+Decal Material
+Relative Transform
+Surface Offset
+Decal Size / Life Time
+```
+
+资产关系：
+
+```text
+DA_Rifle
+-> DA_Impact_Ballistic
+   -> Default
+   -> Concrete
+   -> Metal
+   -> Wood
+   -> Flesh
+```
+
+不同武器类型引用不同 Profile，例如 Ballistic、Energy 或 Explosive。现有 `WeaponData.ImpactVFX` 在迁移期间作为默认 fallback，Profile 配置稳定后再决定是否废弃，避免长期保留两套来源。
+
+特殊物体后续通过接口提供 Override：
+
+```text
+IWeaponImpactPresentationProvider
+```
+
+解析优先级：
+
+```text
+命中 Actor/Component 特殊 Override
+-> Impact Profile 的 Physical Surface 配置
+-> Impact Profile Default
+-> WeaponData.ImpactVFX fallback
+```
+
+护盾、能量墙和 Boss 外壳适合使用特殊 Override；普通墙壁、地面、木材和角色身体使用 Physical Surface。
+
+当玩家、敌人、炮塔和大量弹丸都需要共享 Impact、Decal 数量限制和对象池时，再把解析与生成迁移到 `ImpactPresentationSubsystem`。当前阶段继续由 `WeaponPresentationComponent` 消费射击事件。
 
 ### 步骤 4：实现 Hit Marker
 
@@ -170,7 +308,8 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 | 0 | 现有 VFX/SFX 边界验收 | 进行中 |
 | 1 | DamageTestTarget | 已完成 |
 | 2 | Damage/Kill 结果写入 ShotEvent | 进行中（UHT/C++ 已通过） |
-| 3 | Impact VFX | 未开始 |
+| 3A | 通用 Impact VFX | 进行中（UHT/C++ 已通过） |
+| 3B | Surface-aware Impact | 设计预留，暂不实现 |
 | 4 | Hit Marker | 未开始 |
 | 5 | 基础 Combat HUD | 未开始 |
 | 6 | Tracer VFX | 未开始 |
@@ -178,6 +317,12 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 ## 4. 验收清单
 
 - [x] 测试目标可以被射线命中、扣血并死亡。
+- [ ] 射空不会生成 Impact。
+- [ ] 打中墙壁会在正确位置和朝向生成 Impact。
+- [ ] 打中 DamageTestTarget 会生成 Impact。
+- [ ] 最后一枪目标隐藏后，Impact 仍能使用事件快照正常生成。
+- [ ] 切枪或卸装不会清除已经生成的世界 Impact。
+- [ ] Impact 不会陷入表面、反向发射或因缺少资源中断其他表现。
 - [ ] 打中墙壁有 Impact，但没有伤害 Hit Marker。
 - [ ] 打中可受伤目标有 Impact 和普通 Hit Marker。
 - [ ] 击杀目标显示击杀反馈，死亡事件只触发一次。
@@ -188,7 +333,8 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 
 ## 5. 暂缓内容
 
-- 多种 Physical Surface Impact。
+- Surface-aware Impact 的实际资源制作和接入。
+- Impact Sound、Decal 和特殊 Actor Override。
 - 复杂换弹 Montage 和分段音效。
 - 后坐力曲线和扩散恢复。
 - Shotgun 多射线表现。

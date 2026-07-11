@@ -3,6 +3,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Math/RotationMatrix.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -138,6 +139,7 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 	// HandleWeaponShot 只负责事件校验与分发，各类表现独立判断自身资源。
 	PlayMuzzleVFX(*WeaponData, ShotEvent);
 	PlayFireSound(*WeaponData, ShotEvent);
+	PlayImpactVFX(*WeaponData, ShotEvent);
 }
 
 void UWeaponPresentationComponent::PlayMuzzleVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent)
@@ -216,6 +218,94 @@ void UWeaponPresentationComponent::PlayFireSound(const UWeaponDataAsset& WeaponD
 		this,
 		WeaponData.FireSound.Get(),
 		ResolveFireAudioLocation(ShotEvent));
+}
+
+void UWeaponPresentationComponent::PlayImpactVFX(
+	const UWeaponDataAsset& WeaponData,
+	const FWeaponShotEvent& ShotEvent)
+{
+	if (!WeaponData.ImpactVFX)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (WeaponData.ImpactVFXRelativeTransform.ContainsNaN())
+	{
+		LogWarningRateLimited(TEXT("ImpactVFXRelativeTransform 包含无效数值，已跳过 Impact。"));
+		return;
+	}
+
+	UNiagaraSystem* ImpactSystem = WeaponData.ImpactVFX.Get();
+	const float SurfaceOffset = FMath::Max(0.0f, WeaponData.ImpactSurfaceOffset);
+
+	for (const FWeaponTraceResult& TraceResult : ShotEvent.Traces)
+	{
+		if (!TraceResult.bHit)
+		{
+			continue;
+		}
+
+		// 目标可能已在伤害阶段隐藏或关闭碰撞，因此只使用事件中保存的命中快照。
+		FVector ImpactPoint = TraceResult.HitResult.ImpactPoint;
+		if (ImpactPoint.ContainsNaN())
+		{
+			ImpactPoint = TraceResult.TraceEnd;
+		}
+
+		FVector SurfaceNormal = TraceResult.HitResult.ImpactNormal.GetSafeNormal();
+		if (SurfaceNormal.IsNearlyZero())
+		{
+			SurfaceNormal = TraceResult.HitResult.Normal.GetSafeNormal();
+		}
+		if (SurfaceNormal.IsNearlyZero())
+		{
+			SurfaceNormal = (-ShotEvent.AimDirection).GetSafeNormal();
+		}
+
+		if (ImpactPoint.ContainsNaN() || SurfaceNormal.IsNearlyZero() || SurfaceNormal.ContainsNaN())
+		{
+			LogWarningRateLimited(TEXT("Impact 命中点或表面法线无效，已跳过本条射线表现。"));
+			continue;
+		}
+
+		const FVector SpawnLocation = ImpactPoint + SurfaceNormal * SurfaceOffset;
+		const FTransform SurfaceTransform(
+			FRotationMatrix::MakeFromZ(SurfaceNormal).ToQuat(),
+			SpawnLocation,
+			FVector::OneVector);
+		const FTransform SpawnTransform =
+			WeaponData.ImpactVFXRelativeTransform * SurfaceTransform;
+
+		if (SpawnTransform.ContainsNaN())
+		{
+			LogWarningRateLimited(TEXT("Impact 世界变换包含无效数值，已跳过本条射线表现。"));
+			continue;
+		}
+
+		UNiagaraComponent* SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			World,
+			ImpactSystem,
+			SpawnTransform.GetLocation(),
+			SpawnTransform.Rotator(),
+			SpawnTransform.GetScale3D(),
+			true,
+			true,
+			ENCPoolMethod::AutoRelease,
+			true);
+
+		if (!SpawnedComponent)
+		{
+			LogWarningRateLimited(TEXT("ImpactVFX 生成失败，请检查 Niagara 资源和世界状态。"));
+		}
+
+		// Impact 是独立世界效果，不追踪到 ActiveNiagaraComponents，切枪时不主动清除。
+	}
 }
 
 FVector UWeaponPresentationComponent::ResolveFireAudioLocation(const FWeaponShotEvent& ShotEvent) const

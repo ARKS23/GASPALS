@@ -348,8 +348,9 @@ MuzzleVFXRelativeTransform = 按当前武器与特效组合微调，默认使用
 | 5 | Fire Sound 迁移 | 已完成 |
 | 6 | DamageTestTarget | 已完成 |
 | 7 | Damage/Kill 结果写入 ShotEvent | 进行中（UHT/C++ 已通过） |
-| 8 | Impact、Hit Marker | 未开始 |
-| 9 | Tracer | 未开始 |
+| 8 | 通用 Impact VFX | 进行中（UHT/C++ 已通过） |
+| 9 | Hit Marker | 未开始 |
+| 10 | Tracer | 未开始 |
 
 推荐每完成一个阶段就单独验证，不要一次改完所有 C++ 和蓝图。
 
@@ -373,10 +374,12 @@ MuzzleVFXRelativeTransform = 按当前武器与特效组合微调，默认使用
 
 1. 完成现有 Muzzle VFX / Fire Sound 的空资源、全自动和快速装备边界验收。
 2. 新增 DamageTestTarget，并把 Damage/Kill 结果写入 `FWeaponTraceResult`。
-3. 开发通用 Impact VFX 和 Hit Marker。
-4. 添加 Ammo、Crosshair、Health 基础 UI。
-5. 使用 `FWeaponTraceResult` 开发 Tracer。
-6. Shotgun 使用多个 TraceResult。
-7. 联机阶段增加可复制的 ShotCue；服务端伤害判定不得依赖 Overlay Mesh。
+3. 开发通用 Impact VFX，明确世界效果生命周期和法线朝向规范。
+4. 开发 Hit Marker，并使用 Damage/Kill 字段区分普通命中和击杀。
+5. 添加 Ammo、Crosshair、Health 基础 UI。
+6. 使用 Physical Surface + Impact Profile 扩展不同材质表现。
+7. 使用 `FWeaponTraceResult` 开发 Tracer。
+8. Shotgun 使用多个 TraceResult。
+9. 联机阶段增加可复制的 ShotCue；服务端伤害判定不得依赖 Overlay Mesh。
 
 下一阶段详细方案见：[武器命中反馈开发方案](weapon_hit_feedback_development_plan.md)。

@@ -130,6 +130,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
 	TObjectPtr<UNiagaraSystem> ImpactVFX = nullptr;
 
+	// Impact 特效相对于表面法线变换的局部偏移，用于修正资源朝向和缩放。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
+	FTransform ImpactVFXRelativeTransform = FTransform::Identity;
+
+	// 沿命中表面法线向外偏移，避免特效与表面重叠闪烁。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX", meta=(ClampMin="0.0", UIMin="0.0", Units="cm"))
+	float ImpactSurfaceOffset = 1.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
 	TObjectPtr<UNiagaraSystem> TracerVFX = nullptr;
 
