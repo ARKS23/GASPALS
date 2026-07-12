@@ -13,6 +13,17 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogWeaponPresentation, Log, All);
 
+namespace WeaponPresentationParameters
+{
+	// 所有项目 Tracer Niagara System 都必须暴露这两个世界空间 Position 参数。
+	const FName TracerStart = TEXT("User.BeamStart");
+	const FName TracerEnd = TEXT("User.BeamEnd");
+	const FName TracerDuration = TEXT("User.TracerDuration");
+
+	// 过滤退化线段，避免 Niagara 在起终点重合时产生无效朝向或异常拉伸。
+	constexpr double MinimumTracerLength = 1.0;
+}
+
 UWeaponPresentationComponent::UWeaponPresentationComponent()
 {
 	// 所有状态变化都由装备和射击事件驱动，不需要每帧 Tick。
@@ -139,6 +150,7 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 	// HandleWeaponShot 只负责事件校验与分发，各类表现独立判断自身资源。
 	PlayMuzzleVFX(*WeaponData, ShotEvent);
 	PlayFireSound(*WeaponData, ShotEvent);
+	PlayTracerVFX(*WeaponData, ShotEvent);
 	PlayImpactVFX(*WeaponData, ShotEvent);
 	BroadcastHitConfirmation(ShotEvent);
 }
@@ -219,6 +231,81 @@ void UWeaponPresentationComponent::PlayFireSound(const UWeaponDataAsset& WeaponD
 		this,
 		WeaponData.FireSound.Get(),
 		ResolveFireAudioLocation(ShotEvent));
+}
+
+void UWeaponPresentationComponent::PlayTracerVFX(
+	const UWeaponDataAsset& WeaponData,
+	const FWeaponShotEvent& ShotEvent)
+{
+	if (!WeaponData.TracerVFX)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	UNiagaraSystem* TracerSystem = WeaponData.TracerVFX.Get();
+	const double MinimumLengthSquared = FMath::Square(WeaponPresentationParameters::MinimumTracerLength);
+
+	for (const FWeaponTraceResult& TraceResult : ShotEvent.Traces)
+	{
+		const FVector TracerStart = ResolveTracerStart(ShotEvent, TraceResult);
+		const FVector TracerEnd = TraceResult.TraceEnd;
+
+		if (TracerStart.ContainsNaN() || TracerEnd.ContainsNaN())
+		{
+			LogWarningRateLimited(TEXT("Tracer 起点或终点包含无效数值，已跳过本条射线表现。"));
+			continue;
+		}
+
+		const FVector TracerDirection = TracerEnd - TracerStart;
+		const double TracerLengthSquared = TracerDirection.SizeSquared();
+		if (TracerLengthSquared <= MinimumLengthSquared)
+		{
+			// 极短射线没有可读弹道，也无法提供稳定朝向，直接忽略即可。
+			continue;
+		}
+
+		if (!FMath::IsFinite(WeaponData.TracerSpeed) || WeaponData.TracerSpeed <= 0.0f)
+		{
+			LogWarningRateLimited(TEXT("TracerSpeed 必须大于 0，已跳过本次 Tracer 表现。"));
+			continue;
+		}
+
+		// 命中和未命中都按同一视觉速度运动，距离差异只影响飞行时长。
+		const float TracerDuration = static_cast<float>(
+			FMath::Sqrt(TracerLengthSquared) / static_cast<double>(WeaponData.TracerSpeed));
+
+		UNiagaraComponent* SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			World,
+			TracerSystem,
+			TracerStart,
+			TracerDirection.Rotation(),
+			FVector::OneVector,
+			true,
+			false,
+			ENCPoolMethod::AutoRelease,
+			// Tracer 的世界空间终点可能位于最大射程处，不能用激活前的小范围 Bounds 预裁剪。
+			false);
+
+		if (!SpawnedComponent)
+		{
+			LogWarningRateLimited(TEXT("TracerVFX 生成失败，请检查 Niagara 资源和世界状态。"));
+			continue;
+		}
+
+		// 必须先写入世界空间 Position 再激活，避免第一帧使用默认值生成原点残影。
+		SpawnedComponent->SetVariablePosition(WeaponPresentationParameters::TracerStart, TracerStart);
+		SpawnedComponent->SetVariablePosition(WeaponPresentationParameters::TracerEnd, TracerEnd);
+		SpawnedComponent->SetVariableFloat(WeaponPresentationParameters::TracerDuration, TracerDuration);
+
+		TrackActiveEffect(SpawnedComponent);
+		SpawnedComponent->Activate(true);
+	}
 }
 
 void UWeaponPresentationComponent::PlayImpactVFX(
@@ -367,6 +454,32 @@ FVector UWeaponPresentationComponent::ResolveFireAudioLocation(const FWeaponShot
 
 	const AActor* OwnerActor = GetOwner();
 	return IsValid(OwnerActor) ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
+}
+
+FVector UWeaponPresentationComponent::ResolveTracerStart(
+	const FWeaponShotEvent& ShotEvent,
+	const FWeaponTraceResult& TraceResult) const
+{
+	if (IsVisualSourceReady())
+	{
+		const FVector VisualMuzzleLocation = VisualMesh->GetSocketLocation(VisualMuzzleSocket);
+		if (!VisualMuzzleLocation.ContainsNaN())
+		{
+			return VisualMuzzleLocation;
+		}
+	}
+
+	if (bUseLogicalMuzzleFallback && !ShotEvent.LogicalMuzzleTransform.ContainsNaN())
+	{
+		const FVector LogicalMuzzleLocation = ShotEvent.LogicalMuzzleTransform.GetLocation();
+		if (!LogicalMuzzleLocation.ContainsNaN())
+		{
+			return LogicalMuzzleLocation;
+		}
+	}
+
+	// 最后使用事件快照中的逻辑射线起点，保证视觉源缺失时仍能安全降级。
+	return TraceResult.TraceStart;
 }
 
 void UWeaponPresentationComponent::HandleNiagaraSystemFinished(UNiagaraComponent* FinishedComponent)

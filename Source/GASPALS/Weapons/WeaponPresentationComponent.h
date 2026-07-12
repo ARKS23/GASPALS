@@ -121,6 +121,9 @@ private:
 	// 在射击发生的世界位置播放一次性枪声；资源为空时安全跳过。
 	void PlayFireSound(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
 
+	// 使用已经确定的射线起终点生成 Tracer；只做视觉表现，不重新执行命中检测。
+	void PlayTracerVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
+
 	// 根据每条射线的命中点和表面法线播放世界空间 Impact；不依赖视觉枪口状态。
 	void PlayImpactVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
 
@@ -129,6 +132,11 @@ private:
 
 	// 优先使用 Overlay 视觉枪口，未就绪时回退到逻辑枪口或武器位置。
 	FVector ResolveFireAudioLocation(const FWeaponShotEvent& ShotEvent) const;
+
+	// Tracer 必须从玩家看到的枪口出发；视觉源不可用时再回退到逻辑射线数据。
+	FVector ResolveTracerStart(
+		const FWeaponShotEvent& ShotEvent,
+		const FWeaponTraceResult& TraceResult) const;
 
 	void SetCurrentWeapon(AWeaponBase* NewWeapon);
 	void UpdatePresentationState();

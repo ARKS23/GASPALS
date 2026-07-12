@@ -378,12 +378,69 @@ CanvasPanel_Root
 
 ### 步骤 6：开发 Tracer
 
-Impact 和 Hit Marker 稳定后再开发 Tracer：
+完成状态：已完成（6A C++、6B 资源/DataAsset 接入、6C 实际开火验收均已通过）
 
-- 起点使用 Overlay 视觉枪口。
-- 终点使用 `FWeaponTraceResult.TraceEnd`。
-- Tracer 只做视觉表现，不修改逻辑射线。
-- Niagara 参数名称需要形成固定资源契约，例如 `User.BeamStart`、`User.BeamEnd`。
+Tracer 只负责把已经发生的命中扫描射线可视化，不重新执行 LineTrace，也不修改伤害结果。现有 `FWeaponShotEvent.Traces` 已提供完整数据，主要开发工作集中在 `WeaponPresentationComponent` 和 Niagara 资源接入。
+
+#### 6A：C++ 表现层
+
+完成状态：已完成（UE5.8 Live Coding 编译成功，运行验收通过）
+
+修改：
+
+```text
+Source/GASPALS/Weapons/WeaponPresentationComponent.h
+Source/GASPALS/Weapons/WeaponPresentationComponent.cpp
+```
+
+1. 新增 `PlayTracerVFX(const UWeaponDataAsset&, const FWeaponShotEvent&)`，并由 `HandleWeaponShot` 与 Muzzle、Fire Sound、Impact 并列调用；`TracerVFX` 为空时安全跳过，不影响其他表现。
+2. 遍历 `ShotEvent.Traces`，每条射线生成一条 Tracer，为后续 Shotgun 多射线保留兼容性。
+3. Tracer 起点按以下优先级解析：Overlay `VisualMesh` 的 `Muzzle` Socket、`ShotEvent.LogicalMuzzleTransform`、`FWeaponTraceResult.TraceStart`。这样视觉弹道优先从玩家实际看到的枪口发出。
+4. 终点直接使用 `FWeaponTraceResult.TraceEnd`：命中时是 `ImpactPoint`，射空时是最大射程终点。表现层不得重新计算终点，避免 Tracer、Impact 和伤害结果不一致。
+5. 生成 Niagara 组件时关闭自动激活，设置起终点和动态时长后再激活；使用 `AutoRelease` 对象池并过滤无效 World、NaN 坐标和过短线段。
+
+固定 Niagara 资源契约：
+
+```text
+User.BeamStart    Niagara Position，世界空间起点
+User.BeamEnd      Niagara Position，世界空间终点
+User.TracerDuration Niagara Float，本次 Tracer 的飞行时长
+```
+
+`UWeaponDataAsset::TracerVFX` 指定表现资源，`TracerSpeed` 指定视觉速度。表现层使用 `射线距离 / TracerSpeed` 计算每次 `User.TracerDuration`，让命中和射空保持一致速度。所有武器 Tracer 统一遵守上述参数契约，颜色、宽度和材质仍由 Niagara 资源控制。
+
+#### 6B：资源与 DataAsset 接入
+
+完成状态：已完成（Niagara 编译 `UpToDate`，无错误和警告，运行验收通过）
+
+工具状态：UE5.8 自带的实验性 `NiagaraToolsets` 已在 `GASPALS.uproject` 中启用并完成重启验证。MCP 已注册 `Info`、`Component`、`Blueprint`、`System`、`Assets` 五个工具集，并通过 `GetSystemSummary` 成功读取 `Projectile_01` 的 User Variables、四个 Emitter 及 Renderer 结构。
+
+已检查导入的 `Content/POLYMORPHFX/DemolitionistGunnerFireShotVFX`：
+
+- `NS_Demolitionist_Gunner_FireShot_Projectile_01` 包含 Bullet、Glow、Light、Trail、AddVelocity 和 Ribbon Renderer，视觉上最适合作为步枪/机枪 Tracer 的改造基础。
+- `NS_Demolitionist_Gunner_FireShot_Projectile_02` 包含 Projectile、Glow、Light 和三组 Trail，效果更偏明显的能量弹，可作为风格化武器候选。
+- 两者当前均未暴露 `User.BeamStart`、`User.BeamEnd`。配套 `BP_*_Projectile_01/02` 使用 `ProjectileMovementComponent`、速度、碰撞和 Component Hit，属于真实飞行投射物，而不是可直接接入的两点式 Hitscan Beam。
+
+已完成以下适配：
+
+1. 复制 `Projectile_01` 为 `Content/VFX/Weapons/Tracer/NS_RifleTracer_GASPALS`，商城原始资源保持不变。
+2. 新增 `User.BeamStart`、`User.BeamEnd`（Position）和 `User.TracerDuration`；资源默认值仅用于编辑器预览，运行时由 C++ 按距离和 `TracerSpeed` 覆盖。
+3. Bullet、Glow、Light 改为 World Space；四个 Emitter 均使用 Self、Once、Fixed 生命周期，并把 Loop Duration 绑定到 `User.TracerDuration`。
+4. Bullet、Glow、Light 在 Particle Update 更新位置，Trail 在 Particle Spawn 沿路径采样；统一表达式为 `lerp(User.BeamStart, User.BeamEnd, saturate(Emitter.Age / max(User.TracerDuration, 0.001)))`。
+5. Trail SpawnRate 调整为 `512/s`，确保默认持续时间内有足够 Ribbon 采样点。
+6. `DA_Rifle.TracerVFX` 已配置为适配后的资源；商城 Projectile 蓝图不参与碰撞、伤害或 Impact。
+7. Niagara 的 System、四个 Emitter 共 10 个脚本均为 `UpToDate`，无编译错误和警告。
+8. `WeaponDataAsset` 新增默认 `80000cm/s` 的 `TracerSpeed`，命中和未命中不再使用固定飞行时间。
+
+#### 6C：验收
+
+完成状态：已完成
+
+- 命中时 Tracer 准确终止于 Impact 点，射空时可正常飞向最大射程终点。
+- 弹头朝向跟随 `BeamEnd - BeamStart`，俯仰射击不再保持水平。
+- Niagara 关闭不适用于远距离世界空间 Tracer 的固定 Bounds，射空效果不会被提前裁剪。
+- `DA_Rifle.TracerSpeed = 80000cm/s`，运行时按距离动态计算时长，命中和未命中保持一致视觉速度。
+- 无效速度只跳过 Tracer，不影响 Muzzle、Fire Sound、Impact、Hit Marker 和伤害。
 
 ## 3. 开发进度
 
@@ -396,7 +453,7 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 | 3B | Surface-aware Impact | 已预留 PhysMaterial 数据，完整功能暂缓 |
 | 4 | Hit Marker | C++ 已完成，蓝图接入并入步骤 5 |
 | 5 | 基础 Combat HUD | 5A/5B/5C 接入完成，完整交互验收进行中 |
-| 6 | Tracer VFX | 未开始 |
+| 6 | Tracer VFX | 已完成（C++、资源接入和运行验收通过） |
 
 ## 4. 验收清单
 
@@ -416,7 +473,7 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 - [ ] Ammo UI 初始化时不会显示默认错误值。
 - [x] Health UI 初始化后正确显示组件快照（PIE 已验证 `150/150`）。
 - [ ] 重新 Possess 后 HUD 能解绑旧 Pawn 并显示新 Pawn 状态。
-- [ ] Tracer 起点来自视觉枪口，终点与实际射线结果一致。
+- [x] Tracer 起终点与实际射线结果一致，命中和未命中均能正常显示且视觉速度一致。
 - [ ] 关闭 Debug Trace 后仍能清楚判断开火、命中和剩余弹药。
 
 ## 5. 暂缓内容

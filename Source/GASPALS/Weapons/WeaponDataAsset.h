@@ -141,6 +141,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
 	TObjectPtr<UNiagaraSystem> TracerVFX = nullptr;
 
+	// Tracer 的视觉飞行速度，单位为厘米/秒；表现层会根据本次射线距离动态计算播放时长。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX", meta=(ClampMin="1.0", UIMin="1.0", Units="cm/s"))
+	float TracerSpeed = 80000.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Debug")
 	bool bDrawDebugTrace = true;
 
