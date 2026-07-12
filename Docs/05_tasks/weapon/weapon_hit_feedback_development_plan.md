@@ -285,13 +285,52 @@ Source/GASPALS/Weapons/WeaponPresentationComponent.cpp
 - 同一次射击包含多条射线时只广播一次，任意击杀均让 Kill Marker 优先。
 - 表现组件只广播事件，不直接创建或持有 Widget。
 
-Hit Marker 的蓝图接入并入步骤 5，不单独创建临时 HUD。`WBP_HitMarker` 提供 `PlayDamageMarker` 和 `PlayKillMarker`；连续命中时停止旧动画并从头播放，不排队累积。
+Hit Marker 的蓝图接入并入步骤 5，不单独创建临时 HUD。`WBP_HitMarker` 提供 `PlayDamageMarker` 和 `PlayKillMarker`；连续命中时重置并重新开始当前表现，不排队累积。
 
 ### 步骤 5：补齐基础 HUD
 
-完成状态：结构设计完成，蓝图资产与运行验收待完成
+完成状态：5A C++ 已完成并通过 UHT/C++ 编译，编辑器重启与 5B/5C 蓝图接入待完成
 
-步骤 5 与步骤 4 的蓝图部分合并实施。游戏 UI 放在项目 `Content`，不修改 GASPALS 插件示例 Widget：
+步骤 5 与步骤 4 的蓝图部分合并实施。采用“C++ 管理状态和生命周期，蓝图负责 UMG 布局与表现”的边界：
+
+```text
+AGASPALSPlayerController                 C++，创建 HUD / 处理 Pawn 变化
+└─ UCombatHUDWidgetBase                 C++，订阅事件 / 汇总 UI 状态
+   └─ WBP_CombatHUD                     蓝图，分发状态 / 组织布局
+      ├─ WBP_Crosshair                  蓝图表现
+      ├─ WBP_HitMarker                  蓝图表现
+      ├─ WBP_WeaponStatus               蓝图表现
+      └─ WBP_PlayerStatus               蓝图表现
+```
+
+#### 5A：C++ HUD 数据层
+
+完成状态：已完成（UHT 与 C++ 编译通过，完整链接及运行验收待编辑器重启）
+
+新增/修改：
+
+```text
+Source/GASPALS/UI/CombatHUDTypes.h
+Source/GASPALS/UI/CombatHUDWidgetBase.h
+Source/GASPALS/UI/CombatHUDWidgetBase.cpp
+Source/GASPALS/Player/GASPALSPlayerController.h
+Source/GASPALS/Player/GASPALSPlayerController.cpp
+Source/GASPALS/GASPALS.Build.cs
+```
+
+`CombatHUDTypes` 提供 Blueprint 可读的 `FWeaponHUDState`、`FPlayerHUDState` 和 `FCrosshairHUDState`。`UCombatHUDWidgetBase` 负责：
+
+- 绑定/解绑 `OnHitConfirmed`、`OnCurrentWeaponChanged`、`OnAmmoChanged`、`OnAimingChanged`、`OnCombatEnabledChanged`、`OnHealthChanged` 和 `OnDeath`。
+- 换枪时先解绑旧武器，再绑定新武器；绑定完成后主动读取一次当前值。
+- Pawn 变化或 Widget 销毁时统一解绑，避免重复回调和悬空引用。
+- 通过 `BlueprintImplementableEvent` 推送整理后的 UI State，不直接引用 `TextBlock`、`ProgressBar` 或具体子 Widget。
+- 全程事件驱动，不使用 UMG Tick 或每帧 Property Binding。
+
+`AGASPALSPlayerController` 只为本地玩家创建一次根 HUD，通过可配置的 `TSubclassOf<UCombatHUDWidgetBase>` 指定 `WBP_CombatHUD`；Pawn 变化时通知根 HUD 重新观察。当前不新增传统 `AHUD` 类。
+
+#### 5B：蓝图 UMG 表现层
+
+游戏 UI 放在项目 `Content`，不修改 GASPALS 插件示例 Widget：
 
 ```text
 Content/UI/Combat/
@@ -316,39 +355,21 @@ CanvasPanel_Root
 └─ Overlay_FullscreenFeedback          后续受伤/低血量层
 ```
 
-职责：
+- `WBP_CombatHUD` 只实现 C++ 推送事件并把状态传给子 Widget，不自行查找 Gameplay Component。
+- `WBP_Crosshair` 显示固定准心并响应瞄准/战斗可用状态；动态扩散暂缓。
+- `WBP_HitMarker` 显示普通伤害与击杀反馈；连续命中时重新开始当前表现，不排队累积。
+- `WBP_WeaponStatus` 显示 `DisplayName`、`FireMode`、弹匣/备用弹药和换弹状态。
+- `WBP_PlayerStatus` 显示当前/最大生命值；护甲、体力及 PlayerState 数据后续接入。
 
-- `WBP_CombatHUD`：保存当前 Pawn/组件引用，统一绑定、解绑并向子 Widget 推送纯 UI 数据。
-- `WBP_Crosshair`：显示固定准心；瞄准时调整间距或透明度，无武器或战斗禁用时隐藏。动态扩散暂缓。
-- `WBP_HitMarker`：普通伤害与击杀动画；它与 Crosshair 同级，避免准心样式变化影响命中反馈。
-- `WBP_WeaponStatus`：显示 `DisplayName`、`FireMode`、弹匣/备用弹药和换弹状态；武器图标待 DataAsset 增加 HUD Icon 后再接入。
-- `WBP_PlayerStatus`：显示当前/最大生命值；护甲和体力在对应业务组件完成后再增加。跨 Pawn 的分数、队伍等数据后续读取 PlayerState。
+已验证的 `UMGToolSet` 用于通过 MCP 创建 WBP、拼接 Widget Tree、设置 Widget/Slot 属性并编译保存。它暂不支持创建 Widget Animation，因此第一版 Hit Marker 使用蓝图表现逻辑控制 `RenderOpacity/RenderTransform`；需要精细时间轴时再在 Designer 中补动画或扩展工具。
 
-事件绑定：
+#### 5C：开发顺序
 
-```text
-WeaponPresentationComponent.OnHitConfirmed -> WBP_HitMarker
-CombatComponent.OnAimingChanged             -> WBP_Crosshair
-CombatComponent.OnCombatEnabledChanged      -> Crosshair/WeaponStatus 可见性
-WeaponComponent.OnCurrentWeaponChanged      -> 重绑 WeaponBase.OnAmmoChanged
-HealthComponent.OnHealthChanged             -> WBP_PlayerStatus
-```
-
-HUD 使用事件驱动，不使用 UMG Tick 或每帧 Property Binding。绑定事件后必须主动读取一次当前值，避免装备、弹药或生命值在 Widget 创建前已经初始化。
-
-生命周期：
-
-1. 新增项目侧 `BP_PlayerController`，只为本地控制器创建一次 `WBP_CombatHUD` 并调用 `AddToPlayerScreen`。
-2. `OnPossess` 调用 `CombatHUD.InitializeFromPawn(NewPawn)`；`OnUnPossess` 解绑旧 Pawn。
-3. HUD 保存 `BoundWeapon`；换枪时先解绑旧武器 `OnAmmoChanged`，再绑定新武器并立即刷新。
-4. 子 Widget 不直接查找 Character/Component，只接收根 HUD 传入的数值和表现命令。
-
-开发顺序：
-
-1. 创建四个子 Widget 和根 `WBP_CombatHUD`。
-2. 接入 Hit Marker，再接入准心、武器状态和玩家生命值。
-3. 新增 PlayerController 并配置当前 GameMode/关卡使用它。
-4. 验证射空、打墙、伤害、击杀、瞄准、换枪、换弹、卸装和重新 Possess。
+1. [x] 开发 C++ HUD State、根 Widget 基类和 PlayerController，并完成编译。
+2. [ ] 使用 `UMGToolSet` 创建根 HUD 与四个子 Widget，设置层级、Anchor、尺寸和 ZOrder。
+3. [ ] 使用 Blueprint Toolset 接入 C++ 推送事件，完成 Hit Marker、准心、武器状态和生命值显示。
+4. [ ] 配置当前 GameMode/关卡使用新 PlayerController。
+5. [ ] 验证射空、打墙、伤害、击杀、瞄准、换枪、换弹、卸装和重新 Possess。
 
 ### 步骤 6：开发 Tracer
 
@@ -369,7 +390,7 @@ Impact 和 Hit Marker 稳定后再开发 Tracer：
 | 3A | 通用 Impact VFX | 已完成（运行验收通过） |
 | 3B | Surface-aware Impact | 已预留 PhysMaterial 数据，完整功能暂缓 |
 | 4 | Hit Marker | C++ 已完成，蓝图接入并入步骤 5 |
-| 5 | 基础 Combat HUD | 设计完成，蓝图开发与运行验收待完成 |
+| 5 | 基础 Combat HUD | 5A C++ 已完成（UHT/C++ 通过），5B/5C 待开始 |
 | 6 | Tracer VFX | 未开始 |
 
 ## 4. 验收清单
