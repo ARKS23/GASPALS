@@ -13,6 +13,9 @@ void UHealthComponent::BeginPlay()
 	MaxHealth = FMath::Max(0.0f, MaxHealth);
 	CurrentHealth = MaxHealth;
 	bIsDead = CurrentHealth <= 0.0f;
+
+	// HUD 可能早于组件 BeginPlay 完成绑定；Delta=0 只同步初始快照，不表示治疗。
+	OnHealthChanged.Broadcast(this, CurrentHealth, 0.0f, nullptr);
 }
 
 bool UHealthComponent::ApplyDamage(float DamageAmount, AActor* DamageCauser)
