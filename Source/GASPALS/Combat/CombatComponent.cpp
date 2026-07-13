@@ -118,6 +118,8 @@ void UCombatComponent::StopFire()
 
 bool UCombatComponent::CanStartFire() const
 {
+	if (!bWantsToAim) return false;
+	
 	const UWeaponComponent* FoundWeaponComponent = GetWeaponComponent();
 
 	return bCombatEnabled
