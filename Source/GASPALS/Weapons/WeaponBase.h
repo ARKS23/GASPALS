@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "WeaponAccuracyTypes.h"
 #include "WeaponShotTypes.h"
 #include "WeaponBase.generated.h"
 
@@ -99,6 +100,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="Weapon|Ammo")
 	bool HasAmmoInMagazine() const { return CurrentAmmoInMagazine > 0; }
 
+	// 返回当前精度快照；UI 只读取该状态，不直接维护散布。
+	UFUNCTION(BlueprintPure, Category="Weapon|Accuracy")
+	FWeaponAccuracyState GetAccuracyState() const;
+
+	UFUNCTION(BlueprintPure, Category="Weapon|Accuracy")
+	float GetCurrentSpreadAngle() const;
+
 	UFUNCTION(BlueprintPure, Category="Weapon|Components")
 	USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMesh.Get(); }
 
@@ -124,6 +132,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
 	FOnWeaponHitSignature OnWeaponHit;
+
+	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
+	FOnWeaponAccuracyChangedSignature OnAccuracyStateChanged;
 
 protected:
 	virtual void BeginPlay() override;
@@ -160,6 +171,10 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Fire")
 	int32 ShotSequence = 0;
 
+	// 连续成功射击产生的额外散布，不包含 DataAsset 的基础 SpreadAngle。
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Accuracy")
+	float CurrentSpreadBloom = 0.0f;
+
 	// 默认从拥有者 Controller 视角取射线，找不到视角时退回到拥有者或武器朝向。
 	virtual bool GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirection) const;
 
@@ -184,12 +199,28 @@ protected:
 	void ReceiveReloadFinished();
 
 private:
-	// 自动开火和换弹都通过 Timer 驱动，避免给武器开启 Tick。
+	// 自动开火、换弹和散布恢复都通过 Timer 驱动，避免给武器开启 Tick。
 	FTimerHandle AutoFireTimerHandle;
 	FTimerHandle ReloadTimerHandle;
+	FTimerHandle SpreadRecoveryTimerHandle;
+
+	// 上一次完成恢复计算的世界时间，用于按真实经过时间恢复，而不是按 Timer 调用次数恢复。
+	double LastSpreadUpdateTime = 0.0;
+
+	// 缓存上一份已广播快照；精度没有变化时不重复通知蓝图和 HUD。
+	FWeaponAccuracyState LastAccuracyState;
+	bool bHasAccuracyState = false;
 
 	void HandleAutoFire();
+	void ScheduleNextAutoFire();
 	void ClearAutoFireTimer();
+	void ResetSpreadState(bool bBroadcastState);
+	void UpdateSpreadRecovery();
+	void AddSpreadForSuccessfulShot();
+	void StartSpreadRecoveryTimer();
+	void StopSpreadRecoveryTimer();
+	FWeaponAccuracyState BuildAccuracyState() const;
+	void BroadcastAccuracyStateChanged(bool bForce = false);
 	void BroadcastAmmoChanged();
 	void HandleDryFire();
 	FWeaponShotEvent BuildSingleTraceShotEvent(

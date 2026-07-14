@@ -13,6 +13,8 @@
 
 namespace
 {
+constexpr float SpreadRecoveryTickInterval = 1.0f / 30.0f;
+
 FCollisionQueryParams MakeWeaponTraceQueryParams(const AWeaponBase* Weapon)
 {
 	FCollisionQueryParams QueryParams(TEXT("WeaponTrace"), true, Weapon);
@@ -64,6 +66,7 @@ void AWeaponBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	// Actor 销毁或关卡切换时清理 Timer，避免回调已销毁对象。
 	ClearAutoFireTimer();
+	StopSpreadRecoveryTimer();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -77,6 +80,7 @@ void AWeaponBase::InitializeWeapon()
 {
 	// 重新初始化时先清理所有运行中状态，保证换武器或重置时不会继承旧 Timer。
 	ClearAutoFireTimer();
+	StopSpreadRecoveryTimer();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -87,6 +91,7 @@ void AWeaponBase::InitializeWeapon()
 	bIsReloading = false;
 	LastFireTime = -1000000.0f;
 	ShotSequence = 0;
+	ResetSpreadState(true);
 
 	if (!WeaponData)
 	{
@@ -116,24 +121,27 @@ void AWeaponBase::SetWeaponData(UWeaponDataAsset* NewWeaponData, bool bResetAmmo
 	}
 	else
 	{
+		ResetSpreadState(true);
 		BroadcastAmmoChanged();
 	}
 }
 
 bool AWeaponBase::StartFire()
 {
+	// Enhanced Input 的 Started 理论上只触发一次；这里仍做幂等保护，避免蓝图误接 Triggered 后每帧重置射击节拍。
+	if (bWantsToFire)
+	{
+		return false;
+	}
+
 	bWantsToFire = true;
 
-	// 按下开火时先立即打一发，全自动的后续射击再由 Timer 按射速触发。
+	// 按下开火时先立即尝试一发；全自动后续射击统一改由一次性 Timer 自调度。
 	const bool bFired = FireOnce();
 
-	if (WeaponData && WeaponData->IsAutomatic() && !bIsReloading && CurrentAmmoInMagazine > 0)
+	if (WeaponData && WeaponData->IsAutomatic())
 	{
-		if (UWorld* World = GetWorld())
-		{
-			const float FireInterval = FMath::Max(KINDA_SMALL_NUMBER, WeaponData->GetSecondsBetweenShots());
-			World->GetTimerManager().SetTimer(AutoFireTimerHandle, this, &AWeaponBase::HandleAutoFire, FireInterval, true, FireInterval);
-		}
+		ScheduleNextAutoFire();
 	}
 
 	return bFired;
@@ -177,6 +185,10 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 		return false;
 	}
 
+	// 每次开火前按真实世界时间刷新一次，保证 Gameplay 散布不依赖 Timer 或帧率。
+	UpdateSpreadRecovery();
+
+	// 先用旧 Bloom 生成本发方向，再在本发成立后累加，因此第一枪只使用基础散布。
 	FVector ShotDirection = ApplySpreadToDirection(TraceDirection);
 	if (!ShotDirection.Normalize())
 	{
@@ -186,6 +198,8 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 	// 只有真正通过 CanFire 的射击才扣弹和刷新射速时间。
 	LastFireTime = World->GetTimeSeconds();
 	CurrentAmmoInMagazine = FMath::Max(0, CurrentAmmoInMagazine - 1);
+	// 这里增加的 Bloom 影响下一发，不会反向改变已经生成的 ShotDirection。
+	AddSpreadForSuccessfulShot();
 	BroadcastAmmoChanged();
 
 	const FVector TraceEnd = TraceStart + ShotDirection * WeaponData->Range;
@@ -481,14 +495,33 @@ bool AWeaponBase::GetMuzzleTransform(FTransform& OutMuzzleTransform) const
 FVector AWeaponBase::ApplySpreadToDirection(const FVector& TraceDirection) const
 {
 	const FVector NormalizedDirection = TraceDirection.GetSafeNormal();
-	if (!WeaponData || WeaponData->SpreadAngle <= 0.0f)
+	const float CurrentSpreadAngle = GetCurrentSpreadAngle();
+	if (CurrentSpreadAngle <= 0.0f)
 	{
 		return NormalizedDirection;
 	}
 
-	const float SpreadRadians = FMath::DegreesToRadians(WeaponData->SpreadAngle);
-	// VRandCone 用角度圆锥模拟基础散布，后续可替换为更可控的后坐力/扩散曲线。
+	const float SpreadRadians = FMath::DegreesToRadians(CurrentSpreadAngle);
+	// 阶段 1 继续使用 VRandCone，后续联机阶段再改为由 ShotSequence 驱动的确定性随机。
 	return FMath::VRandCone(NormalizedDirection, SpreadRadians);
+}
+
+FWeaponAccuracyState AWeaponBase::GetAccuracyState() const
+{
+	return BuildAccuracyState();
+}
+
+float AWeaponBase::GetCurrentSpreadAngle() const
+{
+	if (!WeaponData)
+	{
+		return 0.0f;
+	}
+
+	const float BaseSpread = FMath::Max(0.0f, WeaponData->SpreadAngle);
+	const float MaxBloom = FMath::Max(0.0f, WeaponData->MaxSpreadBloom);
+	const float Bloom = FMath::Clamp(CurrentSpreadBloom, 0.0f, MaxBloom);
+	return BaseSpread + Bloom;
 }
 
 FVector AWeaponBase::GetMuzzleLocation() const
@@ -520,20 +553,43 @@ AActor* AWeaponBase::GetDamageCauser() const
 
 void AWeaponBase::HandleAutoFire()
 {
-	// Timer 回调时再次检查状态，防止换弹、松开按键或换数据后继续开火。
-	if (!bWantsToFire || !WeaponData || !WeaponData->IsAutomatic())
-	{
-		ClearAutoFireTimer();
-		return;
-	}
-
-	if (bIsReloading || CurrentAmmoInMagazine <= 0)
+	// 一次性 Timer 到期后只尝试一发；下一发从本次实际成功时间重新调度，不追赶卡顿期间错过的子弹。
+	if (!bWantsToFire || !WeaponData || !WeaponData->IsAutomatic()
+		|| bIsReloading || CurrentAmmoInMagazine <= 0)
 	{
 		ClearAutoFireTimer();
 		return;
 	}
 
 	FireOnce();
+	ScheduleNextAutoFire();
+}
+
+void AWeaponBase::ScheduleNextAutoFire()
+{
+	UWorld* World = GetWorld();
+	if (!World || !bWantsToFire || !WeaponData || !WeaponData->IsAutomatic()
+		|| !WeaponData->IsValidWeaponData() || bIsReloading || CurrentAmmoInMagazine <= 0)
+	{
+		ClearAutoFireTimer();
+		return;
+	}
+
+	const float FireInterval = FMath::Max(KINDA_SMALL_NUMBER, WeaponData->GetSecondsBetweenShots());
+	const float TimeSinceLastShot = World->GetTimeSeconds() - LastFireTime;
+
+	// 快速松开再按下时可能尚未满足射速限制，此时只等待剩余时间；其他失败则按完整间隔后重试。
+	const float NextFireDelay = TimeSinceLastShot >= 0.0f && TimeSinceLastShot < FireInterval
+		? FMath::Max(KINDA_SMALL_NUMBER, FireInterval - TimeSinceLastShot)
+		: FireInterval;
+
+	// 使用非循环 Timer，避免 Timer 的固定节拍与 LastFireTime 的实际射击时间产生漂移并吞掉某一发。
+	World->GetTimerManager().SetTimer(
+		AutoFireTimerHandle,
+		this,
+		&AWeaponBase::HandleAutoFire,
+		NextFireDelay,
+		false);
 }
 
 void AWeaponBase::ClearAutoFireTimer()
@@ -542,6 +598,169 @@ void AWeaponBase::ClearAutoFireTimer()
 	{
 		World->GetTimerManager().ClearTimer(AutoFireTimerHandle);
 	}
+}
+
+void AWeaponBase::ResetSpreadState(bool bBroadcastState)
+{
+	StopSpreadRecoveryTimer();
+	CurrentSpreadBloom = 0.0f;
+
+	const UWorld* World = GetWorld();
+	LastSpreadUpdateTime = World ? static_cast<double>(World->GetTimeSeconds()) : 0.0;
+
+	if (bBroadcastState)
+	{
+		BroadcastAccuracyStateChanged(true);
+	}
+}
+
+void AWeaponBase::UpdateSpreadRecovery()
+{
+	UWorld* World = GetWorld();
+	if (!World || !WeaponData)
+	{
+		return;
+	}
+
+	const float RecoveryRate = FMath::Max(0.0f, WeaponData->SpreadRecoveryRate);
+	if (CurrentSpreadBloom <= KINDA_SMALL_NUMBER)
+	{
+		const bool bHadResidualBloom = CurrentSpreadBloom > 0.0f;
+		CurrentSpreadBloom = 0.0f;
+		StopSpreadRecoveryTimer();
+		if (bHadResidualBloom)
+		{
+			BroadcastAccuracyStateChanged();
+		}
+
+		return;
+	}
+
+	if (RecoveryRate <= 0.0f)
+	{
+		StopSpreadRecoveryTimer();
+		return;
+	}
+
+	const double Now = static_cast<double>(World->GetTimeSeconds());
+	const double RecoveryDelay = static_cast<double>(FMath::Max(0.0f, WeaponData->SpreadRecoveryDelay));
+	const double RecoveryStartTime = static_cast<double>(LastFireTime) + RecoveryDelay;
+	// 只计算“上次更新时间”和“恢复延迟结束”之后的交集，避免把等待期误算成恢复时间。
+	const double EffectiveStartTime = FMath::Max(LastSpreadUpdateTime, RecoveryStartTime);
+	const double ElapsedRecoveryTime = FMath::Max(0.0, Now - EffectiveStartTime);
+	// 即使仍在等待期也推进时间锚点；跨过 Delay 的首个 Tick 只恢复 Delay 之后的部分。
+	LastSpreadUpdateTime = Now;
+
+	if (ElapsedRecoveryTime <= 0.0)
+	{
+		return;
+	}
+
+	const float PreviousBloom = CurrentSpreadBloom;
+	CurrentSpreadBloom = FMath::Max(
+		0.0f,
+		CurrentSpreadBloom - static_cast<float>(ElapsedRecoveryTime) * RecoveryRate);
+	if (CurrentSpreadBloom <= KINDA_SMALL_NUMBER)
+	{
+		CurrentSpreadBloom = 0.0f;
+	}
+
+	if (!FMath::IsNearlyEqual(CurrentSpreadBloom, PreviousBloom))
+	{
+		BroadcastAccuracyStateChanged();
+	}
+
+	if (CurrentSpreadBloom <= 0.0f)
+	{
+		StopSpreadRecoveryTimer();
+	}
+}
+
+void AWeaponBase::AddSpreadForSuccessfulShot()
+{
+	if (!WeaponData)
+	{
+		return;
+	}
+
+	const float MaxBloom = FMath::Max(0.0f, WeaponData->MaxSpreadBloom);
+	const float SpreadPerShot = FMath::Max(0.0f, WeaponData->SpreadPerShot);
+	const float PreviousBloom = CurrentSpreadBloom;
+	// CurrentSpreadBloom 只记录额外值，基础 SpreadAngle 不参与这里的累加和截断。
+	CurrentSpreadBloom = FMath::Clamp(CurrentSpreadBloom + SpreadPerShot, 0.0f, MaxBloom);
+
+	if (const UWorld* World = GetWorld())
+	{
+		LastSpreadUpdateTime = static_cast<double>(World->GetTimeSeconds());
+	}
+
+	if (!FMath::IsNearlyEqual(CurrentSpreadBloom, PreviousBloom))
+	{
+		BroadcastAccuracyStateChanged();
+	}
+
+	if (CurrentSpreadBloom > KINDA_SMALL_NUMBER && WeaponData->SpreadRecoveryRate > 0.0f)
+	{
+		StartSpreadRecoveryTimer();
+	}
+}
+
+void AWeaponBase::StartSpreadRecoveryTimer()
+{
+	UWorld* World = GetWorld();
+	if (!World || World->GetTimerManager().IsTimerActive(SpreadRecoveryTimerHandle))
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		SpreadRecoveryTimerHandle,
+		this,
+		&AWeaponBase::UpdateSpreadRecovery,
+		SpreadRecoveryTickInterval,
+		true,
+		SpreadRecoveryTickInterval);
+}
+
+void AWeaponBase::StopSpreadRecoveryTimer()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(SpreadRecoveryTimerHandle);
+	}
+}
+
+FWeaponAccuracyState AWeaponBase::BuildAccuracyState() const
+{
+	FWeaponAccuracyState State;
+	if (!WeaponData)
+	{
+		return State;
+	}
+
+	State.BaseSpreadDegrees = FMath::Max(0.0f, WeaponData->SpreadAngle);
+	const float MaxBloom = FMath::Max(0.0f, WeaponData->MaxSpreadBloom);
+	State.BloomSpreadDegrees = FMath::Clamp(CurrentSpreadBloom, 0.0f, MaxBloom);
+	State.FinalSpreadDegrees = State.BaseSpreadDegrees + State.BloomSpreadDegrees;
+	// 归一化值只描述连续射击 Bloom，避免不同武器基础散布不同导致 HUD 比例不可比较。
+	State.NormalizedSpread = MaxBloom > KINDA_SMALL_NUMBER
+		? FMath::Clamp(State.BloomSpreadDegrees / MaxBloom, 0.0f, 1.0f)
+		: 0.0f;
+
+	return State;
+}
+
+void AWeaponBase::BroadcastAccuracyStateChanged(bool bForce)
+{
+	const FWeaponAccuracyState NewState = BuildAccuracyState();
+	if (!bForce && bHasAccuracyState && NewState == LastAccuracyState)
+	{
+		return;
+	}
+
+	LastAccuracyState = NewState;
+	bHasAccuracyState = true;
+	OnAccuracyStateChanged.Broadcast(this, NewState);
 }
 
 void AWeaponBase::BroadcastAmmoChanged()

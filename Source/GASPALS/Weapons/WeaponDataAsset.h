@@ -78,6 +78,22 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire", meta=(ClampMin="0.0", UIMin="0.0", Units="deg"))
 	float SpreadAngle = 0.0f;
 
+	// 每次成功射击增加的额外散布；失败射击、空仓和射速限制不会累加。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0", Units="deg"))
+	float SpreadPerShot = 0.0f;
+
+	// 连续射击 Bloom 的最大值，不包含基础 SpreadAngle。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0", Units="deg"))
+	float MaxSpreadBloom = 0.0f;
+
+	// 最后一发成功射击后等待多久开始恢复 Bloom。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0", Units="s"))
+	float SpreadRecoveryDelay = 0.0f;
+
+	// 每秒恢复的 Bloom 角度；为 0 时 Bloom 不自动恢复。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0", Units="deg/s"))
+	float SpreadRecoveryRate = 0.0f;
+
 	// Hitscan 使用的碰撞通道，第一版默认 Visibility。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire")
 	TEnumAsByte<ECollisionChannel> TraceChannel = ECC_Visibility;
