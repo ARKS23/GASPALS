@@ -2,10 +2,13 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Core/CameraSystemEvaluator.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/IGameplayCameraSystemHost.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "WeaponDataAsset.h"
@@ -14,6 +17,50 @@
 namespace
 {
 constexpr float SpreadRecoveryTickInterval = 1.0f / 30.0f;
+
+bool TryGetGameplayCameraPreVisualAim(
+	APlayerController* PlayerController,
+	FVector& OutViewLocation,
+	FVector& OutAimDirection)
+{
+	if (!PlayerController)
+	{
+		return false;
+	}
+
+	IGameplayCameraSystemHost* CameraSystemHost =
+		IGameplayCameraSystemHost::FindActiveHost(PlayerController);
+	if (!CameraSystemHost)
+	{
+		return false;
+	}
+
+	const TSharedPtr<UE::Cameras::FCameraSystemEvaluator> CameraSystemEvaluator =
+		CameraSystemHost->GetCameraSystemEvaluator();
+	if (!CameraSystemEvaluator)
+	{
+		return false;
+	}
+
+	// Pre-Visual 结果保留当前 Camera Rig 的构图，但排除 Visual Layer 中的震动和偏移。
+	const UE::Cameras::FCameraSystemEvaluationResult& PreVisualResult =
+		CameraSystemEvaluator->GetPreVisualLayerEvaluatedResult();
+	if (!PreVisualResult.bIsValid)
+	{
+		return false;
+	}
+
+	const FVector ViewLocation = PreVisualResult.CameraPose.GetLocation();
+	FVector AimDirection = PreVisualResult.CameraPose.GetRotation().Vector();
+	if (ViewLocation.ContainsNaN() || !AimDirection.Normalize())
+	{
+		return false;
+	}
+
+	OutViewLocation = ViewLocation;
+	OutAimDirection = AimDirection;
+	return true;
+}
 
 FCollisionQueryParams MakeWeaponTraceQueryParams(const AWeaponBase* Weapon)
 {
@@ -361,7 +408,7 @@ bool AWeaponBase::CanReload() const
 	return CurrentAmmoInMagazine < MagazineSize;
 }
 
-bool AWeaponBase::GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirection) const
+bool AWeaponBase::GetLogicalAimView(FVector& OutViewLocation, FVector& OutAimDirection) const
 {
 	AController* Controller = GetInstigatorController();
 
@@ -375,24 +422,39 @@ bool AWeaponBase::GetTraceView(FVector& OutTraceStart, FVector& OutTraceDirectio
 
 	if (Controller)
 	{
-		// 第三人称射击优先使用玩家视角做逻辑射线，保证准星指哪打哪。
-		FRotator ViewRotation = FRotator::ZeroRotator;
-		Controller->GetPlayerViewPoint(OutTraceStart, ViewRotation);
-		OutTraceDirection = ViewRotation.Vector();
-		return !OutTraceDirection.IsNearlyZero();
+		if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
+		{
+			if (TryGetGameplayCameraPreVisualAim(PlayerController, OutViewLocation, OutAimDirection))
+			{
+				return true;
+			}
+		}
+
+		// Gameplay Camera 尚未完成首次求值时，保留视点位置，但不用最终视觉旋转参与射击。
+		FVector ViewLocation = FVector::ZeroVector;
+		FRotator IgnoredVisualRotation = FRotator::ZeroRotator;
+		Controller->GetPlayerViewPoint(ViewLocation, IgnoredVisualRotation);
+
+		FVector AimDirection = Controller->GetControlRotation().Vector();
+		if (!ViewLocation.ContainsNaN() && AimDirection.Normalize())
+		{
+			OutViewLocation = ViewLocation;
+			OutAimDirection = AimDirection;
+			return true;
+		}
 	}
 
 	if (const AActor* OwnerActor = GetOwner())
 	{
 		// 非玩家武器或没有 Controller 时，退回拥有者位置和朝向。
-		OutTraceStart = OwnerActor->GetActorLocation();
-		OutTraceDirection = OwnerActor->GetActorForwardVector();
-		return !OutTraceDirection.IsNearlyZero();
+		OutViewLocation = OwnerActor->GetActorLocation();
+		OutAimDirection = OwnerActor->GetActorForwardVector();
+		return !OutViewLocation.ContainsNaN() && OutAimDirection.Normalize();
 	}
 
-	OutTraceStart = GetMuzzleLocation();
-	OutTraceDirection = GetActorForwardVector();
-	return !OutTraceDirection.IsNearlyZero();
+	OutViewLocation = GetMuzzleLocation();
+	OutAimDirection = GetActorForwardVector();
+	return !OutViewLocation.ContainsNaN() && OutAimDirection.Normalize();
 }
 
 bool AWeaponBase::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirection) const
@@ -400,13 +462,13 @@ bool AWeaponBase::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirect
 	// 模式一 : 摄像机中心射线
 	if (!WeaponData || WeaponData->TraceMode == EWeaponTraceMode::CameraView)
 	{
-		return GetTraceView(OutTraceStart, OutTraceDirection);
+		return GetLogicalAimView(OutTraceStart, OutTraceDirection);
 	}
 
 	FTransform MuzzleTransform;
 	if (!GetMuzzleTransform(MuzzleTransform))
 	{
-		return GetTraceView(OutTraceStart, OutTraceDirection);
+		return GetLogicalAimView(OutTraceStart, OutTraceDirection);
 	}
 
 	OutTraceStart = MuzzleTransform.GetLocation();
@@ -443,7 +505,7 @@ bool AWeaponBase::GetCameraAimPoint(FVector& OutAimPoint) const
 {
 	FVector CameraStart = FVector::ZeroVector;
 	FVector CameraDirection = FVector::ForwardVector;
-	if (!GetTraceView(CameraStart, CameraDirection))
+	if (!GetLogicalAimView(CameraStart, CameraDirection))
 	{
 		return false;
 	}
