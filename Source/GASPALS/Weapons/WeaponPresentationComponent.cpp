@@ -22,6 +22,15 @@ namespace WeaponPresentationParameters
 
 	// 过滤退化线段，避免 Niagara 在起终点重合时产生无效朝向或异常拉伸。
 	constexpr double MinimumTracerLength = 1.0;
+
+	float SampleFiniteRange(FRandomStream& RandomStream, float FirstValue, float SecondValue)
+	{
+		const float SafeFirstValue = FMath::IsFinite(FirstValue) ? FirstValue : 0.0f;
+		const float SafeSecondValue = FMath::IsFinite(SecondValue) ? SecondValue : 0.0f;
+		return RandomStream.FRandRange(
+			FMath::Min(SafeFirstValue, SafeSecondValue),
+			FMath::Max(SafeFirstValue, SafeSecondValue));
+	}
 }
 
 UWeaponPresentationComponent::UWeaponPresentationComponent()
@@ -150,9 +159,53 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 	// HandleWeaponShot 只负责事件校验与分发，各类表现独立判断自身资源。
 	PlayMuzzleVFX(*WeaponData, ShotEvent);
 	PlayFireSound(*WeaponData, ShotEvent);
+	BroadcastRecoilRequest(*WeaponData, ShotEvent);
 	PlayTracerVFX(*WeaponData, ShotEvent);
 	PlayImpactVFX(*WeaponData, ShotEvent);
 	BroadcastHitConfirmation(ShotEvent);
+}
+
+void UWeaponPresentationComponent::BroadcastRecoilRequest(
+	const UWeaponDataAsset& WeaponData,
+	const FWeaponShotEvent& ShotEvent)
+{
+	FWeaponRecoilCue RecoilCue;
+	RecoilCue.ShotSequence = ShotEvent.ShotSequence;
+
+	// 稳定种子让同一武器、同一射击序号得到可复现的视觉方向，便于调试和后续联机迁移。
+	const FName RecoilSeedName = WeaponData.WeaponId.IsNone()
+		? WeaponData.GetFName()
+		: WeaponData.WeaponId;
+	const uint32 RecoilSeed = HashCombine(
+		GetTypeHash(RecoilSeedName),
+		GetTypeHash(ShotEvent.ShotSequence));
+	FRandomStream RecoilRandom(static_cast<int32>(RecoilSeed));
+
+	RecoilCue.PitchDegrees = WeaponPresentationParameters::SampleFiniteRange(
+		RecoilRandom, WeaponData.RecoilPitchMin, WeaponData.RecoilPitchMax);
+	RecoilCue.YawDegrees = WeaponPresentationParameters::SampleFiniteRange(
+		RecoilRandom, WeaponData.RecoilYawMin, WeaponData.RecoilYawMax);
+	RecoilCue.KickSpeed = FMath::IsFinite(WeaponData.RecoilKickSpeed)
+		? FMath::Max(0.0f, WeaponData.RecoilKickSpeed)
+		: 0.0f;
+	RecoilCue.ReturnSpeed = FMath::IsFinite(WeaponData.RecoilReturnSpeed)
+		? FMath::Max(0.0f, WeaponData.RecoilReturnSpeed)
+		: 0.0f;
+
+	// 不完整的速度配置不能留下永久镜头偏移；Shake 仍可作为独立反馈广播。
+	if (RecoilCue.KickSpeed <= 0.0f || RecoilCue.ReturnSpeed <= 0.0f)
+	{
+		RecoilCue.PitchDegrees = 0.0f;
+		RecoilCue.YawDegrees = 0.0f;
+	}
+
+	RecoilCue.CameraShakeClass = WeaponData.CameraShakeClass;
+	RecoilCue.CameraShakeScale = FMath::IsFinite(WeaponData.CameraShakeScale)
+		? FMath::Max(0.0f, WeaponData.CameraShakeScale)
+		: 0.0f;
+	RecoilCue.RecoilMode = WeaponData.RecoilMode;
+
+	OnRecoilRequested.Broadcast(this, RecoilCue);
 }
 
 void UWeaponPresentationComponent::PlayMuzzleVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent)

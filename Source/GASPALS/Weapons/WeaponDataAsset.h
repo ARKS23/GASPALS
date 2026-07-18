@@ -3,9 +3,11 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Engine/EngineTypes.h"
+#include "WeaponRecoilTypes.h"
 #include "WeaponDataAsset.generated.h"
 
 class UAnimMontage;
+class UCameraShakeBase;
 class USoundBase;
 class UNiagaraSystem;
 
@@ -93,6 +95,39 @@ public:
 	// 每秒恢复的 Bloom 角度；为 0 时 Bloom 不自动恢复。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0", Units="deg/s"))
 	float SpreadRecoveryRate = 0.0f;
+
+	// 单发视觉上抬范围。正值表示镜头向上，最小值大于最大值时由表现层自动排序。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.0", UIMin="0.0", Units="deg"))
+	float RecoilPitchMin = 0.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.0", UIMin="0.0", Units="deg"))
+	float RecoilPitchMax = 0.0f;
+
+	// 单发水平偏移范围。负值向左，正值向右。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(Units="deg"))
+	float RecoilYawMin = 0.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(Units="deg"))
+	float RecoilYawMax = 0.0f;
+
+	// 方向性偏移的施加速度。为 0 时不生成方向性镜头后坐力。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.0", UIMin="0.0", Units="deg/s"))
+	float RecoilKickSpeed = 0.0f;
+
+	// 停止施加后坐力后的回正速度。为 0 时不生成方向性镜头后坐力，避免镜头永久停在偏移位置。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.0", UIMin="0.0", Units="deg/s"))
+	float RecoilReturnSpeed = 0.0f;
+
+	// 可选的细碎相机震动；主要方向仍由 Pitch/Yaw 驱动，Shake 不参与逻辑瞄准。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil")
+	TSubclassOf<UCameraShakeBase> CameraShakeClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.0", UIMin="0.0"))
+	float CameraShakeScale = 0.0f;
+
+	// DA_Rifle 默认使用 GameplayAim，使镜头、准心和下一发射线共享后坐力方向。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil")
+	EWeaponRecoilMode RecoilMode = EWeaponRecoilMode::GameplayAim;
 
 	// Hitscan 使用的碰撞通道，第一版默认 Visibility。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire")

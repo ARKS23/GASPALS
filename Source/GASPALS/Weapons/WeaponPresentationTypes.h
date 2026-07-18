@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "WeaponRecoilTypes.h"
 #include "WeaponPresentationTypes.generated.h"
 
 // Hit Marker 只描述玩家侧反馈强度，不参与命中或伤害判定。

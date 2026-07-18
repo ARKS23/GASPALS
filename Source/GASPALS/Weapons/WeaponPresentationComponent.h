@@ -13,6 +13,12 @@ class UWeaponComponent;
 class UWeaponDataAsset;
 class UWeaponPresentationComponent;
 
+// 玩家侧后坐力执行器只消费完整 Cue，不需要依赖武器实例或 DataAsset。
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnWeaponRecoilRequestedSignature,
+	UWeaponPresentationComponent*, PresentationComponent,
+	const FWeaponRecoilCue&, RecoilCue);
+
 // UI 只监听伤害确认结果，不需要依赖武器实例或完整命中数据。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnWeaponHitConfirmedSignature,
@@ -67,6 +73,10 @@ public:
 	// 只有伤害实际生效时才广播；打中墙壁、无敌目标或已死亡目标不会触发。
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Presentation|Hit Marker")
 	FOnWeaponHitConfirmedSignature OnHitConfirmed;
+
+	// 每次成功射击广播一次；空仓、换弹和射速限制失败不会产生 Cue。
+	UPROPERTY(BlueprintAssignable, Category="Weapon|Presentation|Recoil")
+	FOnWeaponRecoilRequestedSignature OnRecoilRequested;
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -129,6 +139,9 @@ private:
 
 	// 把同一次射击的多条射线汇总成一次 UI 伤害确认，避免未来 Shotgun 重复播放动画。
 	void BroadcastHitConfirmation(const FWeaponShotEvent& ShotEvent);
+
+	// 根据本发数据生成不可变后坐力快照；该函数不访问 Controller 或 Camera。
+	void BroadcastRecoilRequest(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
 
 	// 优先使用 Overlay 视觉枪口，未就绪时回退到逻辑枪口或武器位置。
 	FVector ResolveFireAudioLocation(const FWeaponShotEvent& ShotEvent) const;

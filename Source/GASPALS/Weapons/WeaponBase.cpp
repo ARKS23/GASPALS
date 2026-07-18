@@ -13,6 +13,7 @@
 #include "TimerManager.h"
 #include "WeaponDataAsset.h"
 #include "../Health/HealthComponent.h"
+#include "../Player/PlayerRecoilComponent.h"
 
 namespace
 {
@@ -426,6 +427,7 @@ bool AWeaponBase::GetLogicalAimView(FVector& OutViewLocation, FVector& OutAimDir
 		{
 			if (TryGetGameplayCameraPreVisualAim(PlayerController, OutViewLocation, OutAimDirection))
 			{
+				ApplyGameplayAimRecoil(OutAimDirection);
 				return true;
 			}
 		}
@@ -440,6 +442,7 @@ bool AWeaponBase::GetLogicalAimView(FVector& OutViewLocation, FVector& OutAimDir
 		{
 			OutViewLocation = ViewLocation;
 			OutAimDirection = AimDirection;
+			ApplyGameplayAimRecoil(OutAimDirection);
 			return true;
 		}
 	}
@@ -455,6 +458,27 @@ bool AWeaponBase::GetLogicalAimView(FVector& OutViewLocation, FVector& OutAimDir
 	OutViewLocation = GetMuzzleLocation();
 	OutAimDirection = GetActorForwardVector();
 	return !OutViewLocation.ContainsNaN() && OutAimDirection.Normalize();
+}
+
+void AWeaponBase::ApplyGameplayAimRecoil(FVector& InOutAimDirection) const
+{
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	const UPlayerRecoilComponent* RecoilComponent = OwnerPawn
+		? OwnerPawn->FindComponentByClass<UPlayerRecoilComponent>()
+		: nullptr;
+	if (!RecoilComponent || InOutAimDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	// 只叠加组件中的 GameplayAim 通道，不修改 ControlRotation 或 Camera Rig 状态。
+	const FVector2D AimRecoil = RecoilComponent->GetLogicalAimRecoilDegrees();
+	FRotator LogicalAimRotation = InOutAimDirection.Rotation();
+	LogicalAimRotation.Pitch = FRotator::NormalizeAxis(
+		LogicalAimRotation.Pitch + static_cast<float>(AimRecoil.X));
+	LogicalAimRotation.Yaw = FRotator::NormalizeAxis(
+		LogicalAimRotation.Yaw + static_cast<float>(AimRecoil.Y));
+	InOutAimDirection = LogicalAimRotation.Vector();
 }
 
 bool AWeaponBase::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirection) const

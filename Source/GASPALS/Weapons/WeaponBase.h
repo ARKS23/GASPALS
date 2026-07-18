@@ -178,6 +178,7 @@ protected:
 	// 返回不包含视觉 Camera Rig、Camera Shake 和 Camera Modifier 的逻辑瞄准视图。
 	// Gameplay Camera 不可用时使用玩家视点位置与 ControlRotation，最后退回拥有者或武器朝向。
 	virtual bool GetLogicalAimView(FVector& OutViewLocation, FVector& OutAimDirection) const;
+	void ApplyGameplayAimRecoil(FVector& InOutAimDirection) const;
 
 	virtual bool BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirection) const;
 	virtual bool GetCameraAimPoint(FVector& OutAimPoint) const;
