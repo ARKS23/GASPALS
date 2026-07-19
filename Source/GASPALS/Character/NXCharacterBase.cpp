@@ -10,6 +10,15 @@ ANXCharacterBase::ANXCharacterBase(const FObjectInitializer& ObjectInitializer)
 	// 需要 CombatComponent 的角色可以继续在蓝图中添加它，基类只负责读取。
 }
 
+FNXWeaponAccuracyContext ANXCharacterBase::GetWeaponAccuracyContext_Implementation() const
+{
+	FNXWeaponAccuracyContext Context;
+	Context.bIsAiming = IsAiming();
+	Context.PlanarSpeedNormalized = GetPlanarSpeedNormalized();
+	Context.bIsAirborne = IsAirborne();
+	return Context;
+}
+
 void ANXCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();

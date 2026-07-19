@@ -104,7 +104,7 @@ struct GASPALS_API FCrosshairHUDState
 	UPROPERTY(BlueprintReadOnly, Category="HUD|Crosshair")
 	bool bIsAiming = false;
 
-	// 当前连续射击 Bloom 相对上限的 0~1 比例，供蓝图直接驱动准心扩张动画。
+	// 当前总散布在武器配置范围内的 0~1 比例，包含 ADS、移动、滞空和 Bloom。
 	UPROPERTY(BlueprintReadOnly, Category="HUD|Crosshair")
 	float NormalizedSpread = 0.0f;
 

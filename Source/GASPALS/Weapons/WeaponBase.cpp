@@ -12,12 +12,45 @@
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "WeaponDataAsset.h"
+#include "NXWeaponAccuracyContextProvider.h"
 #include "../Health/HealthComponent.h"
 #include "../Player/PlayerRecoilComponent.h"
 
 namespace
 {
 constexpr float SpreadRecoveryTickInterval = 1.0f / 30.0f;
+constexpr float AccuracyContextRefreshInterval = 0.05f;
+
+float SanitizeNonNegative(float Value)
+{
+	return FMath::IsFinite(Value) ? FMath::Max(0.0f, Value) : 0.0f;
+}
+
+float SanitizeAimingSpreadMultiplier(float Value)
+{
+	return FMath::IsFinite(Value) ? FMath::Max(0.0f, Value) : 1.0f;
+}
+
+FNXWeaponAccuracyContext SanitizeAccuracyContext(FNXWeaponAccuracyContext Context)
+{
+	Context.PlanarSpeedNormalized = FMath::IsFinite(Context.PlanarSpeedNormalized)
+		? FMath::Clamp(Context.PlanarSpeedNormalized, 0.0f, 1.0f)
+		: 0.0f;
+	return Context;
+}
+
+bool TryResolveAccuracyContext(const UObject* ContextSource, FNXWeaponAccuracyContext& OutContext)
+{
+	if (!IsValid(ContextSource)
+		|| !ContextSource->GetClass()->ImplementsInterface(UNXWeaponAccuracyContextProvider::StaticClass()))
+	{
+		return false;
+	}
+
+	OutContext = SanitizeAccuracyContext(
+		INXWeaponAccuracyContextProvider::Execute_GetWeaponAccuracyContext(ContextSource));
+	return true;
+}
 
 bool TryGetGameplayCameraPreVisualAim(
 	APlayerController* PlayerController,
@@ -90,7 +123,7 @@ FCollisionQueryParams MakeWeaponTraceQueryParams(const AWeaponBase* Weapon)
 
 AWeaponBase::AWeaponBase()
 {
-	// 武器状态由输入、换弹 Timer 和开火 Timer 驱动，不需要每帧 Tick。
+	// 武器状态由输入和各类低频 Timer 驱动，不需要每帧 Tick。
 	PrimaryActorTick.bCanEverTick = false;
 
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
@@ -115,6 +148,7 @@ void AWeaponBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// Actor 销毁或关卡切换时清理 Timer，避免回调已销毁对象。
 	ClearAutoFireTimer();
 	StopSpreadRecoveryTimer();
+	StopAccuracyContextRefreshTimer();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -129,6 +163,7 @@ void AWeaponBase::InitializeWeapon()
 	// 重新初始化时先清理所有运行中状态，保证换武器或重置时不会继承旧 Timer。
 	ClearAutoFireTimer();
 	StopSpreadRecoveryTimer();
+	StopAccuracyContextRefreshTimer();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -156,6 +191,7 @@ void AWeaponBase::InitializeWeapon()
 	CurrentAmmoInMagazine = MagazineSize;
 	CurrentReserveAmmo = FMath::Clamp(WeaponData->InitialReserveAmmo, 0, MaxReserveAmmo);
 
+	UpdateAccuracyContextRefreshTimer();
 	BroadcastAmmoChanged();
 }
 
@@ -170,6 +206,7 @@ void AWeaponBase::SetWeaponData(UWeaponDataAsset* NewWeaponData, bool bResetAmmo
 	else
 	{
 		ResetSpreadState(true);
+		UpdateAccuracyContextRefreshTimer();
 		BroadcastAmmoChanged();
 	}
 }
@@ -236,7 +273,7 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 	// 每次开火前按真实世界时间刷新一次，保证 Gameplay 散布不依赖 Timer 或帧率。
 	UpdateSpreadRecovery();
 
-	// 先用旧 Bloom 生成本发方向，再在本发成立后累加，因此第一枪只使用基础散布。
+	// 先用旧 Bloom 和实时 Context 生成方向，再累加本发 Bloom，避免当前射击反向污染自身精度。
 	FVector ShotDirection = ApplySpreadToDirection(TraceDirection);
 	if (!ShotDirection.Normalize())
 	{
@@ -594,20 +631,13 @@ FVector AWeaponBase::ApplySpreadToDirection(const FVector& TraceDirection) const
 
 FWeaponAccuracyState AWeaponBase::GetAccuracyState() const
 {
-	return BuildAccuracyState();
+	return BuildAccuracyState(ResolveAccuracyContext());
 }
 
 float AWeaponBase::GetCurrentSpreadAngle() const
 {
-	if (!WeaponData)
-	{
-		return 0.0f;
-	}
-
-	const float BaseSpread = FMath::Max(0.0f, WeaponData->SpreadAngle);
-	const float MaxBloom = FMath::Max(0.0f, WeaponData->MaxSpreadBloom);
-	const float Bloom = FMath::Clamp(CurrentSpreadBloom, 0.0f, MaxBloom);
-	return BaseSpread + Bloom;
+	// 射线与 HUD 共用同一 AccuracyState 计算，禁止在这里维护第二套散布公式。
+	return GetAccuracyState().FinalSpreadDegrees;
 }
 
 FVector AWeaponBase::GetMuzzleLocation() const
@@ -816,7 +846,93 @@ void AWeaponBase::StopSpreadRecoveryTimer()
 	}
 }
 
-FWeaponAccuracyState AWeaponBase::BuildAccuracyState() const
+FNXWeaponAccuracyContext AWeaponBase::ResolveAccuracyContext() const
+{
+	FNXWeaponAccuracyContext Context;
+
+	// 玩家和 AI 武器优先从 Owner 读取；当前 WeaponComponent 生成武器时会正确设置 Owner。
+	if (TryResolveAccuracyContext(GetOwner(), Context))
+	{
+		return Context;
+	}
+
+	// 外部生成或旧逻辑没有设置 Owner 时，再回退到 Instigator。
+	const APawn* InstigatorPawn = GetInstigator();
+	if (InstigatorPawn != GetOwner() && TryResolveAccuracyContext(InstigatorPawn, Context))
+	{
+		return Context;
+	}
+
+	// 非角色拥有者使用默认上下文，保持原有固定散布行为。
+	return Context;
+}
+
+bool AWeaponBase::HasDynamicAccuracyContextModifiers() const
+{
+	if (!WeaponData)
+	{
+		return false;
+	}
+
+	const float HipBaseSpread = SanitizeNonNegative(WeaponData->SpreadAngle);
+	const float AimingMultiplier = SanitizeAimingSpreadMultiplier(WeaponData->AimingSpreadMultiplier);
+	const bool bAimingChangesSpread = HipBaseSpread > KINDA_SMALL_NUMBER
+		&& !FMath::IsNearlyEqual(AimingMultiplier, 1.0f);
+	return bAimingChangesSpread
+		|| SanitizeNonNegative(WeaponData->MaxMovementSpreadAngle) > KINDA_SMALL_NUMBER
+		|| SanitizeNonNegative(WeaponData->AirborneSpreadAngle) > KINDA_SMALL_NUMBER;
+}
+
+void AWeaponBase::RefreshAccuracyContextState()
+{
+	if (!HasDynamicAccuracyContextModifiers())
+	{
+		StopAccuracyContextRefreshTimer();
+		return;
+	}
+
+	// 只重建并比较只读快照；实际散布始终在射击发生时重新读取 Context。
+	BroadcastAccuracyStateChanged();
+}
+
+void AWeaponBase::UpdateAccuracyContextRefreshTimer()
+{
+	if (HasDynamicAccuracyContextModifiers())
+	{
+		StartAccuracyContextRefreshTimer();
+	}
+	else
+	{
+		StopAccuracyContextRefreshTimer();
+	}
+}
+
+void AWeaponBase::StartAccuracyContextRefreshTimer()
+{
+	UWorld* World = GetWorld();
+	if (!World || World->GetTimerManager().IsTimerActive(AccuracyContextRefreshTimerHandle))
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		AccuracyContextRefreshTimerHandle,
+		this,
+		&AWeaponBase::RefreshAccuracyContextState,
+		AccuracyContextRefreshInterval,
+		true,
+		AccuracyContextRefreshInterval);
+}
+
+void AWeaponBase::StopAccuracyContextRefreshTimer()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AccuracyContextRefreshTimerHandle);
+	}
+}
+
+FWeaponAccuracyState AWeaponBase::BuildAccuracyState(const FNXWeaponAccuracyContext& Context) const
 {
 	FWeaponAccuracyState State;
 	if (!WeaponData)
@@ -824,13 +940,44 @@ FWeaponAccuracyState AWeaponBase::BuildAccuracyState() const
 		return State;
 	}
 
-	State.BaseSpreadDegrees = FMath::Max(0.0f, WeaponData->SpreadAngle);
-	const float MaxBloom = FMath::Max(0.0f, WeaponData->MaxSpreadBloom);
+	const FNXWeaponAccuracyContext SafeContext = SanitizeAccuracyContext(Context);
+	State.bIsAiming = SafeContext.bIsAiming;
+	State.PlanarSpeedNormalized = SafeContext.PlanarSpeedNormalized;
+	State.bIsAirborne = SafeContext.bIsAirborne;
+
+	const float HipBaseSpread = SanitizeNonNegative(WeaponData->SpreadAngle);
+	const float AimingMultiplier = SanitizeAimingSpreadMultiplier(WeaponData->AimingSpreadMultiplier);
+	const float AimingBaseSpread = SanitizeNonNegative(HipBaseSpread * AimingMultiplier);
+	State.BaseSpreadDegrees = State.bIsAiming ? AimingBaseSpread : HipBaseSpread;
+
+	const float MaxBloom = SanitizeNonNegative(WeaponData->MaxSpreadBloom);
+	const float MaxMovementSpread = SanitizeNonNegative(WeaponData->MaxMovementSpreadAngle);
+	const float AirborneSpread = SanitizeNonNegative(WeaponData->AirborneSpreadAngle);
 	State.BloomSpreadDegrees = FMath::Clamp(CurrentSpreadBloom, 0.0f, MaxBloom);
-	State.FinalSpreadDegrees = State.BaseSpreadDegrees + State.BloomSpreadDegrees;
-	// 归一化值只描述连续射击 Bloom，避免不同武器基础散布不同导致 HUD 比例不可比较。
-	State.NormalizedSpread = MaxBloom > KINDA_SMALL_NUMBER
+	State.MovementSpreadDegrees = MaxMovementSpread * State.PlanarSpeedNormalized;
+	State.AirborneSpreadDegrees = State.bIsAirborne ? AirborneSpread : 0.0f;
+	State.FinalSpreadDegrees = SanitizeNonNegative(
+		State.BaseSpreadDegrees
+		+ State.BloomSpreadDegrees
+		+ State.MovementSpreadDegrees
+		+ State.AirborneSpreadDegrees);
+
+	State.NormalizedBloom = MaxBloom > KINDA_SMALL_NUMBER
 		? FMath::Clamp(State.BloomSpreadDegrees / MaxBloom, 0.0f, 1.0f)
+		: 0.0f;
+
+	// 使用整把武器配置允许的最小/最大总散布，使 ADS、移动、滞空和 Bloom 共享同一准心比例。
+	const float MinimumConfiguredSpread = FMath::Min(HipBaseSpread, AimingBaseSpread);
+	const float MaximumConfiguredSpread = FMath::Max(HipBaseSpread, AimingBaseSpread)
+		+ MaxBloom
+		+ MaxMovementSpread
+		+ AirborneSpread;
+	const float ConfiguredSpreadRange = MaximumConfiguredSpread - MinimumConfiguredSpread;
+	State.NormalizedSpread = ConfiguredSpreadRange > KINDA_SMALL_NUMBER
+		? FMath::Clamp(
+			(State.FinalSpreadDegrees - MinimumConfiguredSpread) / ConfiguredSpreadRange,
+			0.0f,
+			1.0f)
 		: 0.0f;
 
 	return State;
@@ -838,7 +985,7 @@ FWeaponAccuracyState AWeaponBase::BuildAccuracyState() const
 
 void AWeaponBase::BroadcastAccuracyStateChanged(bool bForce)
 {
-	const FWeaponAccuracyState NewState = BuildAccuracyState();
+	const FWeaponAccuracyState NewState = GetAccuracyState();
 	if (!bForce && bHasAccuracyState && NewState == LastAccuracyState)
 	{
 		return;

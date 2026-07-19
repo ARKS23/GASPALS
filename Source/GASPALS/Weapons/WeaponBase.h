@@ -201,10 +201,11 @@ protected:
 	void ReceiveReloadFinished();
 
 private:
-	// 自动开火、换弹和散布恢复都通过 Timer 驱动，避免给武器开启 Tick。
+	// 自动开火、换弹、Bloom 恢复和动态 Context 刷新都通过 Timer 驱动，避免给武器开启 Tick。
 	FTimerHandle AutoFireTimerHandle;
 	FTimerHandle ReloadTimerHandle;
 	FTimerHandle SpreadRecoveryTimerHandle;
+	FTimerHandle AccuracyContextRefreshTimerHandle;
 
 	// 上一次完成恢复计算的世界时间，用于按真实经过时间恢复，而不是按 Timer 调用次数恢复。
 	double LastSpreadUpdateTime = 0.0;
@@ -221,7 +222,13 @@ private:
 	void AddSpreadForSuccessfulShot();
 	void StartSpreadRecoveryTimer();
 	void StopSpreadRecoveryTimer();
-	FWeaponAccuracyState BuildAccuracyState() const;
+	FNXWeaponAccuracyContext ResolveAccuracyContext() const;
+	FWeaponAccuracyState BuildAccuracyState(const FNXWeaponAccuracyContext& Context) const;
+	bool HasDynamicAccuracyContextModifiers() const;
+	void RefreshAccuracyContextState();
+	void UpdateAccuracyContextRefreshTimer();
+	void StartAccuracyContextRefreshTimer();
+	void StopAccuracyContextRefreshTimer();
 	void BroadcastAccuracyStateChanged(bool bForce = false);
 	void BroadcastAmmoChanged();
 	void HandleDryFire();

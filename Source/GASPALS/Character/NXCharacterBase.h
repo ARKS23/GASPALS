@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "../Weapons/NXWeaponAccuracyContextProvider.h"
 #include "NXCharacterBase.generated.h"
 
 class UCombatComponent;
@@ -13,12 +14,15 @@ class UCombatComponent;
  * 或 GASPALS 动画表现。具体角色仍然可以通过蓝图或后续的 C++ 子类扩展。
  */
 UCLASS(Blueprintable)
-class GASPALS_API ANXCharacterBase : public ACharacter
+class GASPALS_API ANXCharacterBase : public ACharacter, public INXWeaponAccuracyContextProvider
 {
 	GENERATED_BODY()
 
 public:
 	ANXCharacterBase(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+	/** 组合角色当前状态，向武器提供只读精度上下文。 */
+	virtual FNXWeaponAccuracyContext GetWeaponAccuracyContext_Implementation() const override;
 
 	/** 获取角色当前的水平移动速度，忽略 Z 轴速度。 */
 	UFUNCTION(BlueprintPure, Category="NexAur|Movement")

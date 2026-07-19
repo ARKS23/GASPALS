@@ -96,6 +96,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0", Units="deg/s"))
 	float SpreadRecoveryRate = 0.0f;
 
+	// ADS 时对基础 SpreadAngle 应用的倍率。默认 1 保持原有腰射散布。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0"))
+	float AimingSpreadMultiplier = 1.0f;
+
+	// 角色达到当前移动模式最大速度时附加的散布角；中间速度按比例线性计算。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0", Units="deg"))
+	float MaxMovementSpreadAngle = 0.0f;
+
+	// 角色处于跳跃上升或下落状态时附加的固定散布角。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Accuracy", meta=(ClampMin="0.0", UIMin="0.0", Units="deg"))
+	float AirborneSpreadAngle = 0.0f;
+
 	// 单发视觉上抬范围。正值表示镜头向上，最小值大于最大值时由表现层自动排序。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.0", UIMin="0.0", Units="deg"))
 	float RecoilPitchMin = 0.0f;
