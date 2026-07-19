@@ -104,12 +104,22 @@ struct GASPALS_API FCrosshairHUDState
 	UPROPERTY(BlueprintReadOnly, Category="HUD|Crosshair")
 	bool bIsAiming = false;
 
+	// 当前连续射击 Bloom 相对上限的 0~1 比例，供蓝图直接驱动准心扩张动画。
+	UPROPERTY(BlueprintReadOnly, Category="HUD|Crosshair")
+	float NormalizedSpread = 0.0f;
+
+	// Gameplay 当前使用的散布圆锥半角，保留给调试和后续基于 FOV 的精确屏幕投影。
+	UPROPERTY(BlueprintReadOnly, Category="HUD|Crosshair")
+	float FinalSpreadDegrees = 0.0f;
+
 	bool operator==(const FCrosshairHUDState& Other) const
 	{
 		return bVisible == Other.bVisible
 			&& bHasWeapon == Other.bHasWeapon
 			&& bCombatEnabled == Other.bCombatEnabled
-			&& bIsAiming == Other.bIsAiming;
+			&& bIsAiming == Other.bIsAiming
+			&& FMath::IsNearlyEqual(NormalizedSpread, Other.NormalizedSpread)
+			&& FMath::IsNearlyEqual(FinalSpreadDegrees, Other.FinalSpreadDegrees);
 	}
 
 	bool operator!=(const FCrosshairHUDState& Other) const { return !(*this == Other); }

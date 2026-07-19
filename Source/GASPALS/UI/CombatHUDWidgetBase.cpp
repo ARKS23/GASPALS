@@ -75,7 +75,20 @@ FPlayerHUDState UCombatHUDWidgetBase::GetPlayerHUDState() const
 FCrosshairHUDState UCombatHUDWidgetBase::GetCrosshairHUDState() const
 {
 	FCrosshairHUDState State;
-	State.bHasWeapon = IsValid(BoundWeapon.Get());
+	AWeaponBase* Weapon = BoundWeapon.Get();
+	State.bHasWeapon = IsValid(Weapon);
+
+	if (State.bHasWeapon)
+	{
+		// HUD 只复制 WeaponBase 发布的只读精度快照，不在 UI 层重新计算 Gameplay 散布。
+		const FWeaponAccuracyState AccuracyState = Weapon->GetAccuracyState();
+		State.NormalizedSpread = FMath::IsFinite(AccuracyState.NormalizedSpread)
+			? FMath::Clamp(AccuracyState.NormalizedSpread, 0.0f, 1.0f)
+			: 0.0f;
+		State.FinalSpreadDegrees = FMath::IsFinite(AccuracyState.FinalSpreadDegrees)
+			? FMath::Max(0.0f, AccuracyState.FinalSpreadDegrees)
+			: 0.0f;
+	}
 
 	if (IsValid(CombatComponent.Get()))
 	{
@@ -190,6 +203,8 @@ void UCombatHUDWidgetBase::BindWeapon(AWeaponBase* NewWeapon)
 	{
 		BoundWeapon->OnAmmoChanged.RemoveDynamic(
 			this, &UCombatHUDWidgetBase::HandleWeaponAmmoChanged);
+		BoundWeapon->OnAccuracyStateChanged.RemoveDynamic(
+			this, &UCombatHUDWidgetBase::HandleWeaponAccuracyChanged);
 	}
 
 	BoundWeapon = NewWeapon;
@@ -198,6 +213,8 @@ void UCombatHUDWidgetBase::BindWeapon(AWeaponBase* NewWeapon)
 	{
 		BoundWeapon->OnAmmoChanged.AddUniqueDynamic(
 			this, &UCombatHUDWidgetBase::HandleWeaponAmmoChanged);
+		BoundWeapon->OnAccuracyStateChanged.AddUniqueDynamic(
+			this, &UCombatHUDWidgetBase::HandleWeaponAccuracyChanged);
 	}
 }
 
@@ -252,7 +269,8 @@ void UCombatHUDWidgetBase::HandleCurrentWeaponChanged(
 
 	BindWeapon(NewWeapon);
 	PushWeaponHUDState();
-	PushCrosshairHUDState();
+	// 即使两把武器当前数值相同，也要让蓝图重新接收新武器的初始准心状态。
+	PushCrosshairHUDState(true);
 }
 
 void UCombatHUDWidgetBase::HandleWeaponAmmoChanged(
@@ -267,6 +285,19 @@ void UCombatHUDWidgetBase::HandleWeaponAmmoChanged(
 	}
 
 	PushWeaponHUDState();
+}
+
+void UCombatHUDWidgetBase::HandleWeaponAccuracyChanged(
+	AWeaponBase* Weapon,
+	const FWeaponAccuracyState& /*AccuracyState*/)
+{
+	if (Weapon != BoundWeapon.Get())
+	{
+		return;
+	}
+
+	// 事件只负责触发刷新；完整快照仍统一由 GetCrosshairHUDState 构造。
+	PushCrosshairHUDState();
 }
 
 void UCombatHUDWidgetBase::HandleAimingChanged(UCombatComponent* InCombatComponent, bool bIsAiming)

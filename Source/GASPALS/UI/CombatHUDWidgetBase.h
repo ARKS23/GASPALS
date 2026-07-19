@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "CombatHUDTypes.h"
+#include "../Weapons/WeaponAccuracyTypes.h"
 #include "../Weapons/WeaponPresentationTypes.h"
 #include "CombatHUDWidgetBase.generated.h"
 
@@ -107,6 +108,11 @@ private:
 		int32 AmmoInMagazine,
 		int32 ReserveAmmo,
 		bool bIsReloading);
+
+	UFUNCTION()
+	void HandleWeaponAccuracyChanged(
+		AWeaponBase* Weapon,
+		const FWeaponAccuracyState& AccuracyState);
 
 	UFUNCTION()
 	void HandleAimingChanged(UCombatComponent* InCombatComponent, bool bIsAiming);
