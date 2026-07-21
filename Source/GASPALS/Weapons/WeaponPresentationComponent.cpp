@@ -1,5 +1,6 @@
 #include "WeaponPresentationComponent.h"
 
+#include "Animation/AnimMontage.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -82,6 +83,7 @@ void UWeaponPresentationComponent::SetVisualSource(USkeletalMeshComponent* InMes
 		: CurrentWeapon.Get();
 
 	UpdatePresentationState();
+	TryBroadcastEquippedAnimation();
 }
 
 void UWeaponPresentationComponent::ClearVisualSource()
@@ -112,6 +114,15 @@ bool UWeaponPresentationComponent::IsVisualSourceReady() const
 	}
 
 	return VisualMesh->DoesSocketExist(VisualMuzzleSocket);
+}
+
+bool UWeaponPresentationComponent::IsAnimationCueCurrent(
+	const FWeaponAnimationCue& AnimationCue) const
+{
+	return AnimationCue.ActionId > 0
+		&& AnimationCue.ActionId == CurrentAnimationActionId
+		&& IsValid(CurrentWeapon.Get())
+		&& AnimationCue.SourceWeapon == CurrentWeapon.Get();
 }
 
 void UWeaponPresentationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -157,12 +168,60 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 	}
 
 	// HandleWeaponShot 只负责事件校验与分发，各类表现独立判断自身资源。
+	BroadcastAnimationRequest(
+		EWeaponAnimationCueType::Fire,
+		Weapon,
+		BeginAnimationAction());
 	PlayMuzzleVFX(*WeaponData, ShotEvent);
 	PlayFireSound(*WeaponData, ShotEvent);
 	BroadcastRecoilRequest(*WeaponData, ShotEvent);
 	PlayTracerVFX(*WeaponData, ShotEvent);
 	PlayImpactVFX(*WeaponData, ShotEvent);
 	BroadcastHitConfirmation(ShotEvent);
+}
+
+void UWeaponPresentationComponent::HandleReloadStarted(AWeaponBase* Weapon)
+{
+	if (!IsValid(Weapon) || Weapon != CurrentWeapon.Get())
+	{
+		return;
+	}
+
+	// Gameplay 正常情况下只会广播一次；这里仍避免异常重复事件重启 Montage 和声音。
+	if (ActiveReloadCueWeapon.Get() == Weapon && ActiveReloadActionId > 0)
+	{
+		return;
+	}
+
+	ResetReloadAnimationAction();
+	ActiveReloadCueWeapon = Weapon;
+	ActiveReloadActionId = BeginAnimationAction();
+
+	if (const UWeaponDataAsset* WeaponData = Weapon->GetWeaponData())
+	{
+		PlayReloadSound(*WeaponData);
+	}
+
+	BroadcastAnimationRequest(
+		EWeaponAnimationCueType::ReloadStarted,
+		Weapon,
+		ActiveReloadActionId);
+}
+
+void UWeaponPresentationComponent::HandleReloadFinished(AWeaponBase* Weapon)
+{
+	if (IsValid(Weapon) && Weapon == CurrentWeapon.Get())
+	{
+		BroadcastReloadStopAnimation(EWeaponAnimationCueType::ReloadFinished, Weapon);
+	}
+}
+
+void UWeaponPresentationComponent::HandleReloadCanceled(AWeaponBase* Weapon)
+{
+	if (IsValid(Weapon) && Weapon == CurrentWeapon.Get())
+	{
+		BroadcastReloadStopAnimation(EWeaponAnimationCueType::ReloadCanceled, Weapon);
+	}
 }
 
 void UWeaponPresentationComponent::BroadcastRecoilRequest(
@@ -284,6 +343,19 @@ void UWeaponPresentationComponent::PlayFireSound(const UWeaponDataAsset& WeaponD
 		this,
 		WeaponData.FireSound.Get(),
 		ResolveFireAudioLocation(ShotEvent));
+}
+
+void UWeaponPresentationComponent::PlayReloadSound(const UWeaponDataAsset& WeaponData)
+{
+	if (!WeaponData.ReloadSound)
+	{
+		return;
+	}
+
+	UGameplayStatics::PlaySoundAtLocation(
+		this,
+		WeaponData.ReloadSound.Get(),
+		ResolveCurrentWeaponAudioLocation());
 }
 
 void UWeaponPresentationComponent::PlayTracerVFX(
@@ -535,6 +607,198 @@ FVector UWeaponPresentationComponent::ResolveTracerStart(
 	return TraceResult.TraceStart;
 }
 
+FVector UWeaponPresentationComponent::ResolveCurrentWeaponAudioLocation() const
+{
+	// 换弹声不要求枪口 Socket 有效，只要视觉 Mesh 属于当前武器即可作为声源。
+	if (VisualSourceWeapon.Get() == CurrentWeapon.Get()
+		&& IsValid(VisualMesh.Get())
+		&& VisualMesh->IsRegistered())
+	{
+		return VisualMesh->GetComponentLocation();
+	}
+
+	if (IsValid(CurrentWeapon.Get()))
+	{
+		return CurrentWeapon->GetActorLocation();
+	}
+
+	const AActor* OwnerActor = GetOwner();
+	return IsValid(OwnerActor) ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
+}
+
+FWeaponAnimationCue UWeaponPresentationComponent::BuildFallbackAnimationCue(
+	EWeaponAnimationCueType CueType,
+	AWeaponBase* SourceWeapon,
+	int32 ActionId) const
+{
+	FWeaponAnimationCue AnimationCue;
+	AnimationCue.CueType = CueType;
+	AnimationCue.SourceWeapon = SourceWeapon;
+	AnimationCue.ActionId = ActionId;
+	AnimationCue.BlendOutTime = FMath::IsFinite(DefaultAnimationBlendOutTime)
+		? FMath::Max(0.0f, DefaultAnimationBlendOutTime)
+		: 0.15f;
+
+	const UWeaponDataAsset* WeaponData = IsValid(SourceWeapon)
+		? SourceWeapon->GetWeaponData()
+		: nullptr;
+	if (!WeaponData)
+	{
+		return AnimationCue;
+	}
+
+	switch (CueType)
+	{
+	case EWeaponAnimationCueType::Fire:
+		AnimationCue.Montage = WeaponData->FireMontage;
+		AnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::Restart;
+		break;
+
+	case EWeaponAnimationCueType::ReloadStarted:
+	case EWeaponAnimationCueType::ReloadFinished:
+	case EWeaponAnimationCueType::ReloadCanceled:
+		AnimationCue.Montage = WeaponData->ReloadMontage;
+		AnimationCue.RetriggerPolicy = CueType == EWeaponAnimationCueType::ReloadStarted
+			? EWeaponAnimationRetriggerPolicy::IgnoreIfPlaying
+			: EWeaponAnimationRetriggerPolicy::Continue;
+
+		// fallback 阶段直接让 Reload Montage 与 Gameplay ReloadTime 对齐。
+		if (AnimationCue.Montage && WeaponData->ReloadTime > KINDA_SMALL_NUMBER)
+		{
+			const float MontageLength = AnimationCue.Montage->GetPlayLength();
+			if (FMath::IsFinite(MontageLength) && MontageLength > KINDA_SMALL_NUMBER)
+			{
+				AnimationCue.PlayRate = MontageLength / WeaponData->ReloadTime;
+			}
+		}
+		break;
+
+	case EWeaponAnimationCueType::Equipped:
+		AnimationCue.Montage = WeaponData->EquipMontage;
+		AnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::IgnoreIfPlaying;
+		break;
+
+	case EWeaponAnimationCueType::Unequipped:
+		// 旧 WeaponData 没有 UnequipMontage；Profile 接入后可以在这里提供资源。
+		AnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::Continue;
+		break;
+
+	default:
+		break;
+	}
+
+	if (!FMath::IsFinite(AnimationCue.PlayRate) || AnimationCue.PlayRate <= 0.0f)
+	{
+		AnimationCue.PlayRate = 1.0f;
+	}
+
+	return AnimationCue;
+}
+
+void UWeaponPresentationComponent::BroadcastAnimationRequest(
+	EWeaponAnimationCueType CueType,
+	AWeaponBase* SourceWeapon,
+	int32 ActionId)
+{
+	if (!IsValid(SourceWeapon) || ActionId <= 0)
+	{
+		return;
+	}
+
+	const FWeaponAnimationCue AnimationCue = BuildFallbackAnimationCue(
+		CueType,
+		SourceWeapon,
+		ActionId);
+	OnWeaponAnimationRequested.Broadcast(this, AnimationCue);
+}
+
+void UWeaponPresentationComponent::BroadcastReloadStopAnimation(
+	EWeaponAnimationCueType CueType,
+	AWeaponBase* SourceWeapon)
+{
+	if (CueType != EWeaponAnimationCueType::ReloadFinished
+		&& CueType != EWeaponAnimationCueType::ReloadCanceled)
+	{
+		return;
+	}
+
+	const bool bHasReloadAction =
+		ActiveReloadCueWeapon.Get() == SourceWeapon
+		&& ActiveReloadActionId > 0;
+	const int32 ActionId = bHasReloadAction
+		? ActiveReloadActionId
+		: BeginAnimationAction();
+	if (bHasReloadAction)
+	{
+		// Stop Cue 与 Started 共享编号；即使中途插入 Equipped，也不能把一次换弹拆成两个动作。
+		CurrentAnimationActionId = ActionId;
+	}
+
+	// 先清内部状态再同步广播，避免蓝图回调触发切枪时重复发送取消 Cue。
+	ResetReloadAnimationAction();
+	BroadcastAnimationRequest(CueType, SourceWeapon, ActionId);
+}
+
+void UWeaponPresentationComponent::TryBroadcastEquippedAnimation()
+{
+	AWeaponBase* Weapon = CurrentWeapon.Get();
+	if (PresentationState != EWeaponPresentationState::Ready
+		|| !IsValid(Weapon)
+		|| EquippedCueWeapon.Get() == Weapon)
+	{
+		return;
+	}
+
+	// 广播前先记录，避免同步蓝图回调再次设置视觉源后重复产生 Equipped。
+	EquippedCueWeapon = Weapon;
+	BroadcastAnimationRequest(
+		EWeaponAnimationCueType::Equipped,
+		Weapon,
+		BeginAnimationAction());
+}
+
+int32 UWeaponPresentationComponent::BeginAnimationAction()
+{
+	// 0 保留为无效编号；极端溢出时从 1 重新开始。
+	AnimationActionSerial = AnimationActionSerial >= MAX_int32
+		? 1
+		: AnimationActionSerial + 1;
+	CurrentAnimationActionId = AnimationActionSerial;
+	return CurrentAnimationActionId;
+}
+
+void UWeaponPresentationComponent::ResetReloadAnimationAction()
+{
+	ActiveReloadCueWeapon.Reset();
+	ActiveReloadActionId = 0;
+}
+
+void UWeaponPresentationComponent::BindWeaponEvents(AWeaponBase* Weapon)
+{
+	if (!IsValid(Weapon))
+	{
+		return;
+	}
+
+	Weapon->OnWeaponShot.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleWeaponShot);
+	Weapon->OnReloadStarted.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleReloadStarted);
+	Weapon->OnReloadFinished.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleReloadFinished);
+	Weapon->OnReloadCanceled.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleReloadCanceled);
+}
+
+void UWeaponPresentationComponent::UnbindWeaponEvents(AWeaponBase* Weapon)
+{
+	if (!IsValid(Weapon))
+	{
+		return;
+	}
+
+	Weapon->OnWeaponShot.RemoveDynamic(this, &UWeaponPresentationComponent::HandleWeaponShot);
+	Weapon->OnReloadStarted.RemoveDynamic(this, &UWeaponPresentationComponent::HandleReloadStarted);
+	Weapon->OnReloadFinished.RemoveDynamic(this, &UWeaponPresentationComponent::HandleReloadFinished);
+	Weapon->OnReloadCanceled.RemoveDynamic(this, &UWeaponPresentationComponent::HandleReloadCanceled);
+}
+
 void UWeaponPresentationComponent::HandleNiagaraSystemFinished(UNiagaraComponent* FinishedComponent)
 {
 	ActiveNiagaraComponents.RemoveAll(
@@ -549,13 +813,27 @@ void UWeaponPresentationComponent::SetCurrentWeapon(AWeaponBase* NewWeapon)
 	if (CurrentWeapon == NewWeapon)
 	{
 		UpdatePresentationState();
+		TryBroadcastEquippedAnimation();
 		return;
 	}
 
-	if (IsValid(CurrentWeapon.Get()))
+	AWeaponBase* PreviousWeapon = CurrentWeapon.Get();
+	if (IsValid(PreviousWeapon))
 	{
-		CurrentWeapon->OnWeaponShot.RemoveDynamic(this, &UWeaponPresentationComponent::HandleWeaponShot);
+		// 正常卸装会先收到 Gameplay Canceled；该 fallback 负责初始化切换和 EndPlay 收口。
+		if (ActiveReloadCueWeapon.Get() == PreviousWeapon && ActiveReloadActionId > 0)
+		{
+			BroadcastReloadStopAnimation(EWeaponAnimationCueType::ReloadCanceled, PreviousWeapon);
+		}
+
+		BroadcastAnimationRequest(
+			EWeaponAnimationCueType::Unequipped,
+			PreviousWeapon,
+			BeginAnimationAction());
+		UnbindWeaponEvents(PreviousWeapon);
 	}
+	ResetReloadAnimationAction();
+	EquippedCueWeapon.Reset();
 
 	// 如果当前视觉源不属于新武器，先停止旧效果；属于新武器时保留蓝图已设置的源。
 	if (VisualSourceWeapon.Get() != NewWeapon)
@@ -564,13 +842,10 @@ void UWeaponPresentationComponent::SetCurrentWeapon(AWeaponBase* NewWeapon)
 	}
 
 	CurrentWeapon = NewWeapon;
-
-	if (IsValid(CurrentWeapon.Get()))
-	{
-		CurrentWeapon->OnWeaponShot.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleWeaponShot);
-	}
+	BindWeaponEvents(CurrentWeapon.Get());
 
 	UpdatePresentationState();
+	TryBroadcastEquippedAnimation();
 }
 
 void UWeaponPresentationComponent::UpdatePresentationState()

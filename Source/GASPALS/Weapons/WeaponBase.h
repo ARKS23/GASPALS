@@ -130,6 +130,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
 	FOnWeaponSimpleSignature OnReloadFinished;
 
+	// 只在进行中的换弹被真实打断时广播；正常完成不会触发该事件。
+	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
+	FOnWeaponSimpleSignature OnReloadCanceled;
+
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
 	FOnWeaponHitSignature OnWeaponHit;
 
@@ -200,6 +204,9 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category="Weapon|Events")
 	void ReceiveReloadFinished();
 
+	UFUNCTION(BlueprintImplementableEvent, Category="Weapon|Events")
+	void ReceiveReloadCanceled();
+
 private:
 	// 自动开火、换弹、Bloom 恢复和动态 Context 刷新都通过 Timer 驱动，避免给武器开启 Tick。
 	FTimerHandle AutoFireTimerHandle;
@@ -240,6 +247,5 @@ private:
 		bool bHit,
 		bool bDamageApplied,
 		bool bKilledTarget) const;
-	void PlayReloadFeedback() const;
 	void DrawTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, const FHitResult& HitResult, bool bHit) const;
 };

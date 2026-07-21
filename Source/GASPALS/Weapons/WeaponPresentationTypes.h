@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "WeaponAnimationTypes.h"
 #include "WeaponRecoilTypes.h"
 #include "WeaponPresentationTypes.generated.h"
 

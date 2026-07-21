@@ -5,6 +5,7 @@
 #include "CombatComponent.generated.h"
 
 class UCombatComponent;
+class UHealthComponent;
 class UWeaponComponent;
 
 // 瞄准状态变化事件：UI、相机、Overlay 或动画蓝图可以绑定它做表现同步。
@@ -86,6 +87,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat|Setup")
 	bool bAutoFindWeaponComponentOnBeginPlay = true;
 
+	// 存在 HealthComponent 时自动监听死亡，并通过统一战斗关闭流程停止持续动作。
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat|Setup")
+	bool bDisableCombatOnOwnerDeath = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat|State")
 	bool bCombatEnabled = true;
 
@@ -96,6 +101,9 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Combat|Setup")
 	TObjectPtr<UWeaponComponent> WeaponComponent;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UHealthComponent> HealthComponent;
+
 	// 给蓝图表现层的扩展点，例如切换 GASPALS Overlay、调整相机或显示准星。
 	UFUNCTION(BlueprintImplementableEvent, Category="Combat|Events")
 	void ReceiveAimingChanged(bool bIsAiming);
@@ -104,6 +112,12 @@ protected:
 	void ReceiveCombatEnabledChanged(bool bIsCombatEnabled);
 
 private:
+	UFUNCTION()
+	void HandleOwnerDeath(UHealthComponent* InHealthComponent, AActor* KillerActor);
+
+	void BindHealthComponent();
+	void UnbindHealthComponent();
+	void StopOngoingCombatActions();
 	void BroadcastAimingChanged();
 	void BroadcastCombatEnabledChanged();
 };

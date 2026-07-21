@@ -1,6 +1,7 @@
 #include "CombatComponent.h"
 
 #include "GameFramework/Actor.h"
+#include "../Health/HealthComponent.h"
 #include "../Weapons/WeaponComponent.h"
 
 UCombatComponent::UCombatComponent()
@@ -17,12 +18,20 @@ void UCombatComponent::BeginPlay()
 	{
 		FindRequiredComponents();
 	}
+
+	BindHealthComponent();
 }
 
 void UCombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// 组件销毁时停止开火，避免 WeaponComponent 上的全自动开火 Timer 继续工作。
+	UnbindHealthComponent();
+
+	// 组件销毁时停止持续动作，避免武器 Timer 在 Owner 销毁过程中继续工作。
 	StopFire();
+	if (UWeaponComponent* FoundWeaponComponent = GetWeaponComponent())
+	{
+		FoundWeaponComponent->CancelReload();
+	}
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -52,18 +61,18 @@ bool UCombatComponent::HasWeaponComponent() const
 
 void UCombatComponent::SetCombatEnabled(bool bNewCombatEnabled)
 {
-	if (bCombatEnabled == bNewCombatEnabled)
-	{
-		return;
-	}
-
+	const bool bStateChanged = bCombatEnabled != bNewCombatEnabled;
 	bCombatEnabled = bNewCombatEnabled;
 
 	if (!bCombatEnabled)
 	{
-		// 禁用战斗时主动停止持续行为，避免死亡或切建造模式后还在开火。
-		StopFire();
-		SetAiming(false);
+		// 重复关闭也要再次收口持续动作，使该入口可以安全地由多个系统共同调用。
+		StopOngoingCombatActions();
+	}
+
+	if (!bStateChanged)
+	{
+		return;
 	}
 
 	BroadcastCombatEnabledChanged();
@@ -145,6 +154,54 @@ bool UCombatComponent::CanReload() const
 	return bCombatEnabled
 		&& FoundWeaponComponent
 		&& FoundWeaponComponent->HasWeapon();
+}
+
+void UCombatComponent::HandleOwnerDeath(
+	UHealthComponent* InHealthComponent,
+	AActor* /*KillerActor*/)
+{
+	if (InHealthComponent == HealthComponent.Get())
+	{
+		SetCombatEnabled(false);
+	}
+}
+
+void UCombatComponent::BindHealthComponent()
+{
+	UnbindHealthComponent();
+
+	if (!bDisableCombatOnOwnerDeath)
+	{
+		return;
+	}
+
+	AActor* OwnerActor = GetOwner();
+	HealthComponent = OwnerActor ? OwnerActor->FindComponentByClass<UHealthComponent>() : nullptr;
+	if (IsValid(HealthComponent.Get()))
+	{
+		HealthComponent->OnDeath.AddUniqueDynamic(this, &UCombatComponent::HandleOwnerDeath);
+	}
+}
+
+void UCombatComponent::UnbindHealthComponent()
+{
+	if (IsValid(HealthComponent.Get()))
+	{
+		HealthComponent->OnDeath.RemoveDynamic(this, &UCombatComponent::HandleOwnerDeath);
+	}
+
+	HealthComponent = nullptr;
+}
+
+void UCombatComponent::StopOngoingCombatActions()
+{
+	StopFire();
+	if (UWeaponComponent* FoundWeaponComponent = GetWeaponComponent())
+	{
+		FoundWeaponComponent->CancelReload();
+	}
+
+	SetAiming(false);
 }
 
 void UCombatComponent::BroadcastAimingChanged()

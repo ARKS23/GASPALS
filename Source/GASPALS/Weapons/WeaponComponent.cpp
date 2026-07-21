@@ -134,6 +134,14 @@ bool UWeaponComponent::Reload()
 	return Weapon ? Weapon->StartReload() : false;
 }
 
+void UWeaponComponent::CancelReload()
+{
+	if (AWeaponBase* Weapon = GetCurrentWeapon())
+	{
+		Weapon->CancelReload();
+	}
+}
+
 bool UWeaponComponent::HasWeapon() const
 {
 	return IsValid(CurrentWeapon.Get());

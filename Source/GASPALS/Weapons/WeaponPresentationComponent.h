@@ -19,6 +19,12 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	UWeaponPresentationComponent*, PresentationComponent,
 	const FWeaponRecoilCue&, RecoilCue);
 
+// 角色或 AnimInstance 只消费已经解析完成的动画指令，不读取武器 Gameplay 状态。
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnWeaponAnimationRequestedSignature,
+	UWeaponPresentationComponent*, PresentationComponent,
+	const FWeaponAnimationCue&, AnimationCue);
+
 // UI 只监听伤害确认结果，不需要依赖武器实例或完整命中数据。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnWeaponHitConfirmedSignature,
@@ -70,6 +76,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Weapon|Presentation")
 	AWeaponBase* GetCurrentWeapon() const { return CurrentWeapon.Get(); }
 
+	// Montage 延迟回调执行清理前必须验证 Cue，避免旧动作停止新武器的动画。
+	UFUNCTION(BlueprintPure, Category="Weapon|Presentation|Animation")
+	bool IsAnimationCueCurrent(const FWeaponAnimationCue& AnimationCue) const;
+
 	// 只有伤害实际生效时才广播；打中墙壁、无敌目标或已死亡目标不会触发。
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Presentation|Hit Marker")
 	FOnWeaponHitConfirmedSignature OnHitConfirmed;
@@ -77,6 +87,10 @@ public:
 	// 每次成功射击广播一次；空仓、换弹和射速限制失败不会产生 Cue。
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Presentation|Recoil")
 	FOnWeaponRecoilRequestedSignature OnRecoilRequested;
+
+	// Fire、Reload、Equip 和对应收口动作都通过同一个标准事件发送。
+	UPROPERTY(BlueprintAssignable, Category="Weapon|Presentation|Animation")
+	FOnWeaponAnimationRequestedSignature OnWeaponAnimationRequested;
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -88,6 +102,10 @@ protected:
 	// 同类配置错误的最短日志间隔，避免全自动射击时刷屏。
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Presentation", meta=(ClampMin="0.0", Units="s"))
 	float WarningCooldown = 2.0f;
+
+	// 旧 WeaponData Montage 作为 fallback 时使用；Profile 接入后由条目覆盖该值。
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Presentation|Animation", meta=(ClampMin="0.0", UIMin="0.0", Units="s"))
+	float DefaultAnimationBlendOutTime = 0.15f;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation")
 	EWeaponPresentationState PresentationState = EWeaponPresentationState::Uninitialized;
@@ -104,12 +122,23 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation")
 	FName VisualMuzzleSocket = NAME_None;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation|Animation")
+	int32 CurrentAnimationActionId = 0;
+
 private:
 	// 记录视觉源对应的武器，消除多个 OnCurrentWeaponChanged 监听者的执行顺序差异。
 	TWeakObjectPtr<AWeaponBase> VisualSourceWeapon;
 
 	// 只保存仍在播放的组件；系统结束时会主动移除，避免对象池组件被误清理。
 	TArray<TWeakObjectPtr<UNiagaraComponent>> ActiveNiagaraComponents;
+
+	// Equipped 只允许在当前武器视觉源首次 Ready 时发送一次。
+	TWeakObjectPtr<AWeaponBase> EquippedCueWeapon;
+
+	// ReloadStarted 与 Finished/Canceled 必须共享同一个 ActionId。
+	TWeakObjectPtr<AWeaponBase> ActiveReloadCueWeapon;
+	int32 ActiveReloadActionId = 0;
+	int32 AnimationActionSerial = 0;
 
 	double LastWarningTime = -1.0e30;
 
@@ -123,6 +152,15 @@ private:
 	void HandleWeaponShot(AWeaponBase* Weapon, const FWeaponShotEvent& ShotEvent);
 
 	UFUNCTION()
+	void HandleReloadStarted(AWeaponBase* Weapon);
+
+	UFUNCTION()
+	void HandleReloadFinished(AWeaponBase* Weapon);
+
+	UFUNCTION()
+	void HandleReloadCanceled(AWeaponBase* Weapon);
+
+	UFUNCTION()
 	void HandleNiagaraSystemFinished(UNiagaraComponent* FinishedComponent);
 
 	// 播放单次射击的枪口特效；资源为空时安全跳过，不影响后续其他表现。
@@ -130,6 +168,9 @@ private:
 
 	// 在射击发生的世界位置播放一次性枪声；资源为空时安全跳过。
 	void PlayFireSound(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
+
+	// 基础换弹声跟随 ReloadStarted 播放，后续局部机械声仍由 Anim Notify 负责。
+	void PlayReloadSound(const UWeaponDataAsset& WeaponData);
 
 	// 使用已经确定的射线起终点生成 Tracer；只做视觉表现，不重新执行命中检测。
 	void PlayTracerVFX(const UWeaponDataAsset& WeaponData, const FWeaponShotEvent& ShotEvent);
@@ -151,6 +192,23 @@ private:
 		const FWeaponShotEvent& ShotEvent,
 		const FWeaponTraceResult& TraceResult) const;
 
+	FVector ResolveCurrentWeaponAudioLocation() const;
+	FWeaponAnimationCue BuildFallbackAnimationCue(
+		EWeaponAnimationCueType CueType,
+		AWeaponBase* SourceWeapon,
+		int32 ActionId) const;
+	void BroadcastAnimationRequest(
+		EWeaponAnimationCueType CueType,
+		AWeaponBase* SourceWeapon,
+		int32 ActionId);
+	void BroadcastReloadStopAnimation(
+		EWeaponAnimationCueType CueType,
+		AWeaponBase* SourceWeapon);
+	void TryBroadcastEquippedAnimation();
+	int32 BeginAnimationAction();
+	void ResetReloadAnimationAction();
+	void BindWeaponEvents(AWeaponBase* Weapon);
+	void UnbindWeaponEvents(AWeaponBase* Weapon);
 	void SetCurrentWeapon(AWeaponBase* NewWeapon);
 	void UpdatePresentationState();
 	void StopActiveEffects();

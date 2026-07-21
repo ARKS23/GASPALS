@@ -53,6 +53,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Weapon|Reload")
 	bool Reload();
+
+	// 取消当前武器正在进行的换弹；没有武器或未在换弹时安全跳过。
+	UFUNCTION(BlueprintCallable, Category="Weapon|Reload")
+	void CancelReload();
 	
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	bool AttachWeaponToOwner(AWeaponBase* Weapon) const;

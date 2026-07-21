@@ -145,33 +145,28 @@ void AWeaponBase::BeginPlay()
 
 void AWeaponBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// Actor 销毁或关卡切换时清理 Timer，避免回调已销毁对象。
+	// 销毁前统一结束换弹，让仍然存活的表现监听者有机会清理临时状态。
+	CancelReload();
+
+	// Actor 销毁或关卡切换时清理其余 Timer，避免回调已销毁对象。
 	ClearAutoFireTimer();
 	StopSpreadRecoveryTimer();
 	StopAccuracyContextRefreshTimer();
-
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(ReloadTimerHandle);
-	}
 
 	Super::EndPlay(EndPlayReason);
 }
 
 void AWeaponBase::InitializeWeapon()
 {
-	// 重新初始化时先清理所有运行中状态，保证换武器或重置时不会继承旧 Timer。
+	// 重新初始化前先走正式取消流程，避免静默清状态后遗留换弹表现。
+	CancelReload();
+
+	// 再清理其余运行中状态，保证换武器或重置时不会继承旧 Timer。
 	ClearAutoFireTimer();
 	StopSpreadRecoveryTimer();
 	StopAccuracyContextRefreshTimer();
 
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(ReloadTimerHandle);
-	}
-
 	bWantsToFire = false;
-	bIsReloading = false;
 	LastFireTime = -1000000.0f;
 	ShotSequence = 0;
 	ResetSpreadState(true);
@@ -197,6 +192,8 @@ void AWeaponBase::InitializeWeapon()
 
 void AWeaponBase::SetWeaponData(UWeaponDataAsset* NewWeaponData, bool bResetAmmo)
 {
+	// 必须在替换配置前取消旧换弹，避免旧 Timer 最终使用新弹匣参数结算。
+	CancelReload();
 	WeaponData = NewWeaponData;
 
 	if (bResetAmmo)
@@ -368,7 +365,6 @@ bool AWeaponBase::StartReload()
 	BroadcastAmmoChanged();
 	OnReloadStarted.Broadcast(this);
 	ReceiveReloadStarted();
-	PlayReloadFeedback();
 
 	if (!WeaponData || WeaponData->ReloadTime <= 0.0f)
 	{
@@ -433,6 +429,8 @@ void AWeaponBase::CancelReload()
 
 	bIsReloading = false;
 	BroadcastAmmoChanged();
+	OnReloadCanceled.Broadcast(this);
+	ReceiveReloadCanceled();
 }
 
 bool AWeaponBase::CanReload() const
@@ -1041,14 +1039,6 @@ FWeaponShotEvent AWeaponBase::BuildSingleTraceShotEvent(
 
 	return ShotEvent;
 }
-void AWeaponBase::PlayReloadFeedback() const
-{
-	if (WeaponData && WeaponData->ReloadSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, WeaponData->ReloadSound, GetActorLocation());
-	}
-}
-
 void AWeaponBase::DrawTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, const FHitResult& HitResult, bool bHit) const
 {
 	if (!WeaponData || !WeaponData->bDrawDebugTrace)
