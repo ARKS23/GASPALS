@@ -30,3 +30,17 @@ const FWeaponAnimationEntry* UWeaponAnimationProfile::FindEntry(
 		return nullptr;
 	}
 }
+
+void UWeaponAnimationProfile::GetMontageAssetPaths(
+	TArray<FSoftObjectPath>& OutAssetPaths) const
+{
+	const FWeaponAnimationEntry* Entries[] = { &Fire, &Reload, &Equip, &Unequip };
+	for (const FWeaponAnimationEntry* Entry : Entries)
+	{
+		const FSoftObjectPath AssetPath = Entry->CharacterMontage.ToSoftObjectPath();
+		if (AssetPath.IsValid())
+		{
+			OutAssetPaths.AddUnique(AssetPath);
+		}
+	}
+}

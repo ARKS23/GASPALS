@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "UObject/SoftObjectPtr.h"
 #include "WeaponAnimationTypes.generated.h"
 
@@ -17,6 +18,45 @@ enum class EWeaponAnimationCueType : uint8
 	ReloadCanceled UMETA(DisplayName="Reload Canceled"),
 	Equipped UMETA(DisplayName="Equipped"),
 	Unequipped UMETA(DisplayName="Unequipped")
+};
+
+// Chooser Context 预留视角维度；当前项目默认使用第三人称。
+UENUM(BlueprintType)
+enum class EWeaponAnimationViewMode : uint8
+{
+	ThirdPerson UMETA(DisplayName="Third Person"),
+	FirstPerson UMETA(DisplayName="First Person")
+};
+
+/**
+ * Chooser 唯一读取的稳定输入快照。
+ * 不把 Character 或 Weapon UObject 直接暴露给表格，避免资产规则依赖运行时对象内部结构。
+ */
+USTRUCT(BlueprintType)
+struct GASPALS_API FWeaponAnimationSelectionContext
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category="Weapon|Animation")
+	FGameplayTag CharacterAnimationFamily;
+
+	UPROPERTY(BlueprintReadOnly, Category="Weapon|Animation")
+	FGameplayTag WeaponAnimationFamily;
+
+	UPROPERTY(BlueprintReadOnly, Category="Weapon|Animation")
+	EWeaponAnimationViewMode ViewMode = EWeaponAnimationViewMode::ThirdPerson;
+
+	bool operator==(const FWeaponAnimationSelectionContext& Other) const
+	{
+		return CharacterAnimationFamily == Other.CharacterAnimationFamily
+			&& WeaponAnimationFamily == Other.WeaponAnimationFamily
+			&& ViewMode == Other.ViewMode;
+	}
+
+	bool operator!=(const FWeaponAnimationSelectionContext& Other) const
+	{
+		return !(*this == Other);
+	}
 };
 
 // Profile 决定 Montage 播放率如何解释，最终值会在生成 Cue 时固化。

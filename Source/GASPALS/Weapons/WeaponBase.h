@@ -134,6 +134,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
 	FOnWeaponSimpleSignature OnReloadCanceled;
 
+	// 运行时替换 WeaponData 后通知表现层刷新动画族、Profile 和其他数据缓存。
+	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
+	FOnWeaponSimpleSignature OnWeaponDataChanged;
+
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Events")
 	FOnWeaponHitSignature OnWeaponHit;
 

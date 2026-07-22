@@ -26,6 +26,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "Chooser",
+			"Enabled": true
+		},
+		{
 			"Name": "ModelContextProtocol",
 			"Enabled": true,
 			"TargetAllowList": [

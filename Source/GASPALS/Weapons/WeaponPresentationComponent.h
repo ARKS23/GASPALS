@@ -6,9 +6,14 @@
 #include "WeaponShotTypes.h"
 #include "WeaponPresentationComponent.generated.h"
 
+class ANXCharacterBase;
 class AWeaponBase;
+struct FStreamableHandle;
+class UAnimMontage;
 class UNiagaraComponent;
+class UChooserTable;
 class USkeletalMeshComponent;
+class UWeaponAnimationProfile;
 class UWeaponComponent;
 class UWeaponDataAsset;
 class UWeaponPresentationComponent;
@@ -80,6 +85,25 @@ public:
 	UFUNCTION(BlueprintPure, Category="Weapon|Presentation|Animation")
 	bool IsAnimationCueCurrent(const FWeaponAnimationCue& AnimationCue) const;
 
+	// Context、Chooser 或默认 Profile 调整后手动刷新；常规切枪和角色族变化会自动调用。
+	UFUNCTION(BlueprintCallable, Category="Weapon|Presentation|Animation")
+	void RefreshAnimationProfile();
+
+	UFUNCTION(BlueprintCallable, Category="Weapon|Presentation|Animation")
+	void SetAnimationViewMode(EWeaponAnimationViewMode NewViewMode);
+
+	UFUNCTION(BlueprintPure, Category="Weapon|Presentation|Animation")
+	EWeaponAnimationViewMode GetAnimationViewMode() const { return AnimationViewMode; }
+
+	UFUNCTION(BlueprintPure, Category="Weapon|Presentation|Animation")
+	UWeaponAnimationProfile* GetCurrentAnimationProfile() const { return CurrentAnimationProfile.Get(); }
+
+	UFUNCTION(BlueprintPure, Category="Weapon|Presentation|Animation")
+	FWeaponAnimationSelectionContext GetCurrentAnimationContext() const { return CurrentAnimationContext; }
+
+	UFUNCTION(BlueprintPure, Category="Weapon|Presentation|Animation")
+	bool IsAnimationProfileReady() const { return bAnimationProfileReady; }
+
 	// 只有伤害实际生效时才广播；打中墙壁、无敌目标或已死亡目标不会触发。
 	UPROPERTY(BlueprintAssignable, Category="Weapon|Presentation|Hit Marker")
 	FOnWeaponHitConfirmedSignature OnHitConfirmed;
@@ -93,6 +117,7 @@ public:
 	FOnWeaponAnimationRequestedSignature OnWeaponAnimationRequested;
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	// 视觉源失效时，是否回退到 WeaponBase 提供的逻辑枪口世界变换。
@@ -106,6 +131,17 @@ protected:
 	// 旧 WeaponData Montage 作为 fallback 时使用；Profile 接入后由条目覆盖该值。
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Presentation|Animation", meta=(ClampMin="0.0", UIMin="0.0", Units="s"))
 	float DefaultAnimationBlendOutTime = 0.15f;
+
+	// 项目侧 Chooser Table；为空时直接使用默认 Profile 或旧 WeaponData Montage。
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Presentation|Animation")
+	TObjectPtr<UChooserTable> AnimationProfileChooser;
+
+	// Chooser 无匹配结果时使用；为空仍会继续回退到 WeaponData 旧字段。
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Presentation|Animation")
+	TObjectPtr<UWeaponAnimationProfile> DefaultAnimationProfile;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Presentation|Animation")
+	EWeaponAnimationViewMode AnimationViewMode = EWeaponAnimationViewMode::ThirdPerson;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation")
 	EWeaponPresentationState PresentationState = EWeaponPresentationState::Uninitialized;
@@ -125,6 +161,15 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation|Animation")
 	int32 CurrentAnimationActionId = 0;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation|Animation")
+	FWeaponAnimationSelectionContext CurrentAnimationContext;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation|Animation")
+	TObjectPtr<UWeaponAnimationProfile> CurrentAnimationProfile;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation|Animation")
+	bool bAnimationProfileReady = true;
+
 private:
 	// 记录视觉源对应的武器，消除多个 OnCurrentWeaponChanged 监听者的执行顺序差异。
 	TWeakObjectPtr<AWeaponBase> VisualSourceWeapon;
@@ -134,11 +179,21 @@ private:
 
 	// Equipped 只允许在当前武器视觉源首次 Ready 时发送一次。
 	TWeakObjectPtr<AWeaponBase> EquippedCueWeapon;
+	TWeakObjectPtr<ANXCharacterBase> AnimationContextCharacter;
 
 	// ReloadStarted 与 Finished/Canceled 必须共享同一个 ActionId。
 	TWeakObjectPtr<AWeaponBase> ActiveReloadCueWeapon;
 	int32 ActiveReloadActionId = 0;
+
+	// 保存 Started 时真正使用的 Montage，避免异步 Profile 完成后 Stop Cue 指向另一套资源。
+	UPROPERTY(Transient)
+	FWeaponAnimationCue ActiveReloadAnimationCue;
+
+	TSharedPtr<FStreamableHandle> AnimationProfileLoadHandle;
 	int32 AnimationActionSerial = 0;
+	int32 AnimationProfileRequestSerial = 0;
+	int32 PendingEquippedBaselineActionId = 0;
+	bool bHasResolvedAnimationContext = false;
 
 	double LastWarningTime = -1.0e30;
 
@@ -159,6 +214,14 @@ private:
 
 	UFUNCTION()
 	void HandleReloadCanceled(AWeaponBase* Weapon);
+
+	UFUNCTION()
+	void HandleWeaponDataChanged(AWeaponBase* Weapon);
+
+	UFUNCTION()
+	void HandleCharacterAnimationFamilyChanged(
+		ANXCharacterBase* Character,
+		FGameplayTag NewAnimationFamily);
 
 	UFUNCTION()
 	void HandleNiagaraSystemFinished(UNiagaraComponent* FinishedComponent);
@@ -193,10 +256,24 @@ private:
 		const FWeaponTraceResult& TraceResult) const;
 
 	FVector ResolveCurrentWeaponAudioLocation() const;
-	FWeaponAnimationCue BuildFallbackAnimationCue(
+	FWeaponAnimationCue BuildAnimationCue(
 		EWeaponAnimationCueType CueType,
 		AWeaponBase* SourceWeapon,
 		int32 ActionId) const;
+	bool TryApplyAnimationProfile(
+		FWeaponAnimationCue& InOutAnimationCue,
+		EWeaponAnimationCueType CueType,
+		const UWeaponDataAsset& WeaponData) const;
+	void ApplyLegacyAnimationFallback(
+		FWeaponAnimationCue& InOutAnimationCue,
+		EWeaponAnimationCueType CueType,
+		const UWeaponDataAsset& WeaponData) const;
+	float ResolveProfilePlayRate(
+		const FWeaponAnimationEntry& AnimationEntry,
+		const UWeaponDataAsset& WeaponData,
+		const UAnimMontage& Montage,
+		EWeaponAnimationCueType CueType) const;
+	void BroadcastAnimationCue(const FWeaponAnimationCue& AnimationCue);
 	void BroadcastAnimationRequest(
 		EWeaponAnimationCueType CueType,
 		AWeaponBase* SourceWeapon,
@@ -207,6 +284,17 @@ private:
 	void TryBroadcastEquippedAnimation();
 	int32 BeginAnimationAction();
 	void ResetReloadAnimationAction();
+	FWeaponAnimationSelectionContext BuildAnimationSelectionContext() const;
+	void ResolveAnimationProfile(bool bForceRefresh);
+	UWeaponAnimationProfile* EvaluateAnimationProfile(
+		FWeaponAnimationSelectionContext& SelectionContext) const;
+	void BeginAnimationProfileLoad(UWeaponAnimationProfile* AnimationProfile);
+	void HandleAnimationProfileAssetsLoaded(
+		int32 RequestSerial,
+		TWeakObjectPtr<UWeaponAnimationProfile> RequestedProfile);
+	void CancelAnimationProfileLoad();
+	void BindAnimationContextCharacter();
+	void UnbindAnimationContextCharacter();
 	void BindWeaponEvents(AWeaponBase* Weapon);
 	void UnbindWeaponEvents(AWeaponBase* Weapon);
 	void SetCurrentWeapon(AWeaponBase* NewWeapon);

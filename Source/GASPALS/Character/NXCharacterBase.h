@@ -2,16 +2,27 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "GameplayTagContainer.h"
 #include "../Weapons/NXWeaponAccuracyContextProvider.h"
+#include "../Weapons/WeaponAnimationTypes.h"
 #include "NXCharacterBase.generated.h"
 
+class ANXCharacterBase;
+class UAnimInstance;
+class UAnimMontage;
 class UCombatComponent;
+class UWeaponPresentationComponent;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnNXCharacterAnimationFamilyChangedSignature,
+	ANXCharacterBase*, Character,
+	FGameplayTag, NewAnimationFamily);
 
 /**
  * NexAur 项目的角色 C++ 基类。
  *
- * 该类只提供所有项目角色都可以复用的基础查询接口，不负责具体武器、HUD
- * 或 GASPALS 动画表现。具体角色仍然可以通过蓝图或后续的 C++ 子类扩展。
+ * 该类提供所有项目角色都可以复用的基础查询接口，并执行表现组件已经解析好的
+ * 角色 Montage 指令。它不决定开火、换弹或装备是否合法，也不负责选择动画资产。
  */
 UCLASS(Blueprintable)
 class GASPALS_API ANXCharacterBase : public ACharacter, public INXWeaponAccuracyContextProvider
@@ -47,8 +58,20 @@ public:
 	UFUNCTION(BlueprintPure, Category="NexAur|Combat")
 	bool IsAiming() const;
 
+	UFUNCTION(BlueprintPure, Category="NexAur|Animation")
+	FGameplayTag GetCharacterAnimationFamily() const { return CharacterAnimationFamily; }
+
+	// 运行时换模型时通过该入口更新动画族，表现组件会自动重新解析 Profile。
+	UFUNCTION(BlueprintCallable, Category="NexAur|Animation")
+	void SetCharacterAnimationFamily(FGameplayTag NewAnimationFamily);
+
+	UPROPERTY(BlueprintAssignable, Category="NexAur|Animation")
+	FOnNXCharacterAnimationFamilyChangedSignature OnCharacterAnimationFamilyChanged;
+
 protected:
+	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/**
 	 * 缓存由蓝图添加的项目组件。
@@ -56,4 +79,34 @@ protected:
 	 */
 	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="NexAur|Runtime")
 	TObjectPtr<UCombatComponent> CachedCombatComponent;
+
+	/** 蓝图负责添加和配置组件；角色基类只绑定其标准动画 Cue。 */
+	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="NexAur|Runtime")
+	TObjectPtr<UWeaponPresentationComponent> CachedWeaponPresentationComponent;
+
+	// 角色骨架/动画集合的稳定标识，例如 Animation.Character.GASPALS.Manny。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="NexAur|Animation")
+	FGameplayTag CharacterAnimationFamily;
+
+private:
+	/** 在所有蓝图组件完成实例化后绑定；重复调用不会产生重复监听。 */
+	void BindWeaponAnimationExecutor();
+	void UnbindWeaponAnimationExecutor();
+
+	UFUNCTION()
+	void HandleWeaponAnimationRequested(
+		UWeaponPresentationComponent* PresentationComponent,
+		const FWeaponAnimationCue& AnimationCue);
+
+	bool PlayWeaponAnimationCue(
+		UAnimInstance& AnimInstance,
+		const FWeaponAnimationCue& AnimationCue);
+	void StopWeaponAnimationCue(
+		UAnimInstance& AnimInstance,
+		const FWeaponAnimationCue& AnimationCue);
+	void StopAllWeaponAnimationMontages(UAnimInstance& AnimInstance, float BlendOutTime);
+	void PruneInactiveWeaponAnimationMontages(const UAnimInstance& AnimInstance);
+
+	// 仅跟踪本执行器启动的 Montage，卸装时不会误停 GASPALS 的其他动画通道。
+	TArray<TWeakObjectPtr<UAnimMontage>> ActiveWeaponAnimationMontages;
 };

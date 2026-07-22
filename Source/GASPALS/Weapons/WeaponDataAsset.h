@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Engine/EngineTypes.h"
+#include "GameplayTagContainer.h"
 #include "WeaponRecoilTypes.h"
 #include "WeaponDataAsset.generated.h"
 
@@ -173,6 +174,10 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Animation")
 	TObjectPtr<UAnimMontage> EquipMontage = nullptr;
+
+	// Chooser 使用的武器动画族，例如 Animation.Weapon.Rifle.Standard。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Animation")
+	FGameplayTag WeaponAnimationFamily;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Audio")
 	TObjectPtr<USoundBase> FireSound = nullptr;

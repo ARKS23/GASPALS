@@ -1,7 +1,10 @@
 #include "WeaponPresentationComponent.h"
 
 #include "Animation/AnimMontage.h"
+#include "ChooserFunctionLibrary.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/AssetManager.h"
+#include "Engine/StreamableManager.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Math/RotationMatrix.h"
@@ -9,8 +12,10 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "WeaponBase.h"
+#include "WeaponAnimationProfile.h"
 #include "WeaponComponent.h"
 #include "WeaponDataAsset.h"
+#include "../Character/NXCharacterBase.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWeaponPresentation, Log, All);
 
@@ -38,6 +43,13 @@ UWeaponPresentationComponent::UWeaponPresentationComponent()
 {
 	// 所有状态变化都由装备和射击事件驱动，不需要每帧 Tick。
 	PrimaryComponentTick.bCanEverTick = false;
+}
+
+void UWeaponPresentationComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	BindAnimationContextCharacter();
+	ResolveAnimationProfile(false);
 }
 
 void UWeaponPresentationComponent::InitializePresentation(UWeaponComponent* InWeaponComponent)
@@ -125,8 +137,26 @@ bool UWeaponPresentationComponent::IsAnimationCueCurrent(
 		&& AnimationCue.SourceWeapon == CurrentWeapon.Get();
 }
 
+void UWeaponPresentationComponent::RefreshAnimationProfile()
+{
+	ResolveAnimationProfile(true);
+}
+
+void UWeaponPresentationComponent::SetAnimationViewMode(EWeaponAnimationViewMode NewViewMode)
+{
+	if (AnimationViewMode == NewViewMode)
+	{
+		return;
+	}
+
+	AnimationViewMode = NewViewMode;
+	ResolveAnimationProfile(true);
+}
+
 void UWeaponPresentationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UnbindAnimationContextCharacter();
+
 	if (IsValid(WeaponComponent.Get()))
 	{
 		WeaponComponent->OnCurrentWeaponChanged.RemoveDynamic(
@@ -134,6 +164,7 @@ void UWeaponPresentationComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 	}
 
 	SetCurrentWeapon(nullptr);
+	CancelAnimationProfileLoad();
 	ClearVisualSource();
 	WeaponComponent = nullptr;
 	PresentationState = EWeaponPresentationState::Uninitialized;
@@ -202,10 +233,11 @@ void UWeaponPresentationComponent::HandleReloadStarted(AWeaponBase* Weapon)
 		PlayReloadSound(*WeaponData);
 	}
 
-	BroadcastAnimationRequest(
+	ActiveReloadAnimationCue = BuildAnimationCue(
 		EWeaponAnimationCueType::ReloadStarted,
 		Weapon,
 		ActiveReloadActionId);
+	BroadcastAnimationCue(ActiveReloadAnimationCue);
 }
 
 void UWeaponPresentationComponent::HandleReloadFinished(AWeaponBase* Weapon)
@@ -221,6 +253,24 @@ void UWeaponPresentationComponent::HandleReloadCanceled(AWeaponBase* Weapon)
 	if (IsValid(Weapon) && Weapon == CurrentWeapon.Get())
 	{
 		BroadcastReloadStopAnimation(EWeaponAnimationCueType::ReloadCanceled, Weapon);
+	}
+}
+
+void UWeaponPresentationComponent::HandleWeaponDataChanged(AWeaponBase* Weapon)
+{
+	if (IsValid(Weapon) && Weapon == CurrentWeapon.Get())
+	{
+		ResolveAnimationProfile(true);
+	}
+}
+
+void UWeaponPresentationComponent::HandleCharacterAnimationFamilyChanged(
+	ANXCharacterBase* Character,
+	FGameplayTag /*NewAnimationFamily*/)
+{
+	if (Character == AnimationContextCharacter.Get())
+	{
+		ResolveAnimationProfile(true);
 	}
 }
 
@@ -626,7 +676,7 @@ FVector UWeaponPresentationComponent::ResolveCurrentWeaponAudioLocation() const
 	return IsValid(OwnerActor) ? OwnerActor->GetActorLocation() : FVector::ZeroVector;
 }
 
-FWeaponAnimationCue UWeaponPresentationComponent::BuildFallbackAnimationCue(
+FWeaponAnimationCue UWeaponPresentationComponent::BuildAnimationCue(
 	EWeaponAnimationCueType CueType,
 	AWeaponBase* SourceWeapon,
 	int32 ActionId) const
@@ -647,44 +697,9 @@ FWeaponAnimationCue UWeaponPresentationComponent::BuildFallbackAnimationCue(
 		return AnimationCue;
 	}
 
-	switch (CueType)
+	if (!TryApplyAnimationProfile(AnimationCue, CueType, *WeaponData))
 	{
-	case EWeaponAnimationCueType::Fire:
-		AnimationCue.Montage = WeaponData->FireMontage;
-		AnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::Restart;
-		break;
-
-	case EWeaponAnimationCueType::ReloadStarted:
-	case EWeaponAnimationCueType::ReloadFinished:
-	case EWeaponAnimationCueType::ReloadCanceled:
-		AnimationCue.Montage = WeaponData->ReloadMontage;
-		AnimationCue.RetriggerPolicy = CueType == EWeaponAnimationCueType::ReloadStarted
-			? EWeaponAnimationRetriggerPolicy::IgnoreIfPlaying
-			: EWeaponAnimationRetriggerPolicy::Continue;
-
-		// fallback 阶段直接让 Reload Montage 与 Gameplay ReloadTime 对齐。
-		if (AnimationCue.Montage && WeaponData->ReloadTime > KINDA_SMALL_NUMBER)
-		{
-			const float MontageLength = AnimationCue.Montage->GetPlayLength();
-			if (FMath::IsFinite(MontageLength) && MontageLength > KINDA_SMALL_NUMBER)
-			{
-				AnimationCue.PlayRate = MontageLength / WeaponData->ReloadTime;
-			}
-		}
-		break;
-
-	case EWeaponAnimationCueType::Equipped:
-		AnimationCue.Montage = WeaponData->EquipMontage;
-		AnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::IgnoreIfPlaying;
-		break;
-
-	case EWeaponAnimationCueType::Unequipped:
-		// 旧 WeaponData 没有 UnequipMontage；Profile 接入后可以在这里提供资源。
-		AnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::Continue;
-		break;
-
-	default:
-		break;
+		ApplyLegacyAnimationFallback(AnimationCue, CueType, *WeaponData);
 	}
 
 	if (!FMath::IsFinite(AnimationCue.PlayRate) || AnimationCue.PlayRate <= 0.0f)
@@ -693,6 +708,130 @@ FWeaponAnimationCue UWeaponPresentationComponent::BuildFallbackAnimationCue(
 	}
 
 	return AnimationCue;
+}
+
+bool UWeaponPresentationComponent::TryApplyAnimationProfile(
+	FWeaponAnimationCue& InOutAnimationCue,
+	EWeaponAnimationCueType CueType,
+	const UWeaponDataAsset& WeaponData) const
+{
+	if (!bAnimationProfileReady || !IsValid(CurrentAnimationProfile.Get()))
+	{
+		return false;
+	}
+
+	const FWeaponAnimationEntry* AnimationEntry = CurrentAnimationProfile->FindEntry(CueType);
+	UAnimMontage* Montage = AnimationEntry
+		? AnimationEntry->CharacterMontage.Get()
+		: nullptr;
+	if (!IsValid(Montage))
+	{
+		return false;
+	}
+
+	InOutAnimationCue.Montage = Montage;
+	InOutAnimationCue.StartSection = AnimationEntry->StartSection;
+	InOutAnimationCue.BlendOutTime = FMath::IsFinite(AnimationEntry->BlendOutTime)
+		? FMath::Max(0.0f, AnimationEntry->BlendOutTime)
+		: 0.15f;
+	InOutAnimationCue.RetriggerPolicy = AnimationEntry->RetriggerPolicy;
+	InOutAnimationCue.PlayRate = ResolveProfilePlayRate(
+		*AnimationEntry,
+		WeaponData,
+		*Montage,
+		CueType);
+	return true;
+}
+
+void UWeaponPresentationComponent::ApplyLegacyAnimationFallback(
+	FWeaponAnimationCue& InOutAnimationCue,
+	EWeaponAnimationCueType CueType,
+	const UWeaponDataAsset& WeaponData) const
+{
+	switch (CueType)
+	{
+	case EWeaponAnimationCueType::Fire:
+		InOutAnimationCue.Montage = WeaponData.FireMontage;
+		InOutAnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::Restart;
+		break;
+
+	case EWeaponAnimationCueType::ReloadStarted:
+	case EWeaponAnimationCueType::ReloadFinished:
+	case EWeaponAnimationCueType::ReloadCanceled:
+		InOutAnimationCue.Montage = WeaponData.ReloadMontage;
+		InOutAnimationCue.RetriggerPolicy = CueType == EWeaponAnimationCueType::ReloadStarted
+			? EWeaponAnimationRetriggerPolicy::IgnoreIfPlaying
+			: EWeaponAnimationRetriggerPolicy::Continue;
+
+		// 兼容旧 DataAsset 时仍由 C++ 保证 Reload Montage 与 Gameplay 时间一致。
+		if (InOutAnimationCue.Montage && WeaponData.ReloadTime > KINDA_SMALL_NUMBER)
+		{
+			const float MontageLength = InOutAnimationCue.Montage->GetPlayLength();
+			if (FMath::IsFinite(MontageLength) && MontageLength > KINDA_SMALL_NUMBER)
+			{
+				InOutAnimationCue.PlayRate = MontageLength / WeaponData.ReloadTime;
+			}
+		}
+		break;
+
+	case EWeaponAnimationCueType::Equipped:
+		InOutAnimationCue.Montage = WeaponData.EquipMontage;
+		InOutAnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::IgnoreIfPlaying;
+		break;
+
+	case EWeaponAnimationCueType::Unequipped:
+		// 旧 WeaponData 没有 UnequipMontage，仅 Profile 可以提供该资源。
+		InOutAnimationCue.RetriggerPolicy = EWeaponAnimationRetriggerPolicy::Continue;
+		break;
+
+	default:
+		break;
+	}
+}
+
+float UWeaponPresentationComponent::ResolveProfilePlayRate(
+	const FWeaponAnimationEntry& AnimationEntry,
+	const UWeaponDataAsset& WeaponData,
+	const UAnimMontage& Montage,
+	EWeaponAnimationCueType CueType) const
+{
+	switch (AnimationEntry.TimingPolicy)
+	{
+	case EWeaponAnimationTimingPolicy::FixedPlayRate:
+		return FMath::IsFinite(AnimationEntry.BasePlayRate)
+			? FMath::Max(0.01f, AnimationEntry.BasePlayRate)
+			: 1.0f;
+
+	case EWeaponAnimationTimingPolicy::FitGameplayDuration:
+		if (CueType == EWeaponAnimationCueType::ReloadStarted
+			|| CueType == EWeaponAnimationCueType::ReloadFinished
+			|| CueType == EWeaponAnimationCueType::ReloadCanceled)
+		{
+			const float MontageLength = Montage.GetPlayLength();
+			if (WeaponData.ReloadTime > KINDA_SMALL_NUMBER
+				&& FMath::IsFinite(MontageLength)
+				&& MontageLength > KINDA_SMALL_NUMBER)
+			{
+				return MontageLength / WeaponData.ReloadTime;
+			}
+		}
+		return 1.0f;
+
+	case EWeaponAnimationTimingPolicy::Natural:
+	default:
+		return 1.0f;
+	}
+}
+
+void UWeaponPresentationComponent::BroadcastAnimationCue(
+	const FWeaponAnimationCue& AnimationCue)
+{
+	if (!IsValid(AnimationCue.SourceWeapon.Get()) || AnimationCue.ActionId <= 0)
+	{
+		return;
+	}
+
+	OnWeaponAnimationRequested.Broadcast(this, AnimationCue);
 }
 
 void UWeaponPresentationComponent::BroadcastAnimationRequest(
@@ -705,11 +844,11 @@ void UWeaponPresentationComponent::BroadcastAnimationRequest(
 		return;
 	}
 
-	const FWeaponAnimationCue AnimationCue = BuildFallbackAnimationCue(
+	const FWeaponAnimationCue AnimationCue = BuildAnimationCue(
 		CueType,
 		SourceWeapon,
 		ActionId);
-	OnWeaponAnimationRequested.Broadcast(this, AnimationCue);
+	BroadcastAnimationCue(AnimationCue);
 }
 
 void UWeaponPresentationComponent::BroadcastReloadStopAnimation(
@@ -728,6 +867,11 @@ void UWeaponPresentationComponent::BroadcastReloadStopAnimation(
 	const int32 ActionId = bHasReloadAction
 		? ActiveReloadActionId
 		: BeginAnimationAction();
+	FWeaponAnimationCue StopCue = bHasReloadAction
+		? ActiveReloadAnimationCue
+		: BuildAnimationCue(CueType, SourceWeapon, ActionId);
+	StopCue.CueType = CueType;
+	StopCue.ActionId = ActionId;
 	if (bHasReloadAction)
 	{
 		// Stop Cue 与 Started 共享编号；即使中途插入 Equipped，也不能把一次换弹拆成两个动作。
@@ -736,16 +880,25 @@ void UWeaponPresentationComponent::BroadcastReloadStopAnimation(
 
 	// 先清内部状态再同步广播，避免蓝图回调触发切枪时重复发送取消 Cue。
 	ResetReloadAnimationAction();
-	BroadcastAnimationRequest(CueType, SourceWeapon, ActionId);
+	BroadcastAnimationCue(StopCue);
 }
 
 void UWeaponPresentationComponent::TryBroadcastEquippedAnimation()
 {
 	AWeaponBase* Weapon = CurrentWeapon.Get();
 	if (PresentationState != EWeaponPresentationState::Ready
+		|| !bAnimationProfileReady
 		|| !IsValid(Weapon)
 		|| EquippedCueWeapon.Get() == Weapon)
 	{
+		return;
+	}
+
+	if (PendingEquippedBaselineActionId > 0
+		&& CurrentAnimationActionId != PendingEquippedBaselineActionId)
+	{
+		// Profile 加载期间玩家已经开火或换弹，不能在动作之后迟到地播放 Equip。
+		EquippedCueWeapon = Weapon;
 		return;
 	}
 
@@ -771,6 +924,170 @@ void UWeaponPresentationComponent::ResetReloadAnimationAction()
 {
 	ActiveReloadCueWeapon.Reset();
 	ActiveReloadActionId = 0;
+	ActiveReloadAnimationCue = FWeaponAnimationCue();
+}
+
+FWeaponAnimationSelectionContext UWeaponPresentationComponent::BuildAnimationSelectionContext() const
+{
+	FWeaponAnimationSelectionContext SelectionContext;
+	SelectionContext.ViewMode = AnimationViewMode;
+
+	if (IsValid(AnimationContextCharacter.Get()))
+	{
+		SelectionContext.CharacterAnimationFamily =
+			AnimationContextCharacter->GetCharacterAnimationFamily();
+	}
+
+	if (IsValid(CurrentWeapon.Get()))
+	{
+		if (const UWeaponDataAsset* WeaponData = CurrentWeapon->GetWeaponData())
+		{
+			SelectionContext.WeaponAnimationFamily = WeaponData->WeaponAnimationFamily;
+		}
+	}
+
+	return SelectionContext;
+}
+
+void UWeaponPresentationComponent::ResolveAnimationProfile(bool bForceRefresh)
+{
+	const FWeaponAnimationSelectionContext NewContext = BuildAnimationSelectionContext();
+	if (!bForceRefresh
+		&& bHasResolvedAnimationContext
+		&& NewContext == CurrentAnimationContext)
+	{
+		return;
+	}
+
+	CancelAnimationProfileLoad();
+	CurrentAnimationContext = NewContext;
+	bHasResolvedAnimationContext = true;
+	CurrentAnimationProfile = nullptr;
+	bAnimationProfileReady = false;
+	PendingEquippedBaselineActionId = IsValid(CurrentWeapon.Get())
+		? BeginAnimationAction()
+		: 0;
+
+	if (!IsValid(CurrentWeapon.Get()))
+	{
+		bAnimationProfileReady = true;
+		return;
+	}
+
+	FWeaponAnimationSelectionContext MutableContext = CurrentAnimationContext;
+	UWeaponAnimationProfile* ResolvedProfile = EvaluateAnimationProfile(MutableContext);
+	CurrentAnimationProfile = IsValid(ResolvedProfile)
+		? ResolvedProfile
+		: DefaultAnimationProfile.Get();
+	BeginAnimationProfileLoad(CurrentAnimationProfile.Get());
+}
+
+UWeaponAnimationProfile* UWeaponPresentationComponent::EvaluateAnimationProfile(
+	FWeaponAnimationSelectionContext& SelectionContext) const
+{
+	if (!IsValid(AnimationProfileChooser.Get()))
+	{
+		return nullptr;
+	}
+
+	FChooserEvaluationContext EvaluationContext;
+	EvaluationContext.AddStructParam(SelectionContext);
+	const FInstancedStruct ObjectChooser =
+		UChooserFunctionLibrary::MakeEvaluateChooser(AnimationProfileChooser.Get());
+	return Cast<UWeaponAnimationProfile>(
+		UChooserFunctionLibrary::EvaluateObjectChooserBase(
+			EvaluationContext,
+			ObjectChooser,
+			UWeaponAnimationProfile::StaticClass()));
+}
+
+void UWeaponPresentationComponent::BeginAnimationProfileLoad(
+	UWeaponAnimationProfile* AnimationProfile)
+{
+	if (!IsValid(AnimationProfile))
+	{
+		// 没有 Profile 是合法 fallback 状态，后续 Cue 会读取 WeaponData 旧字段。
+		bAnimationProfileReady = true;
+		TryBroadcastEquippedAnimation();
+		return;
+	}
+
+	TArray<FSoftObjectPath> MontageAssetPaths;
+	AnimationProfile->GetMontageAssetPaths(MontageAssetPaths);
+	if (MontageAssetPaths.IsEmpty())
+	{
+		bAnimationProfileReady = true;
+		TryBroadcastEquippedAnimation();
+		return;
+	}
+
+	const int32 RequestSerial = AnimationProfileRequestSerial;
+	const TWeakObjectPtr<UWeaponAnimationProfile> RequestedProfile(AnimationProfile);
+	AnimationProfileLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+		MontageAssetPaths,
+		FStreamableDelegate::CreateUObject(
+			this,
+			&UWeaponPresentationComponent::HandleAnimationProfileAssetsLoaded,
+			RequestSerial,
+			RequestedProfile));
+
+	if (!AnimationProfileLoadHandle.IsValid())
+	{
+		// 请求创建失败也必须结束 Pending，确保旧 Montage fallback 仍可使用。
+		bAnimationProfileReady = true;
+		TryBroadcastEquippedAnimation();
+	}
+}
+
+void UWeaponPresentationComponent::HandleAnimationProfileAssetsLoaded(
+	int32 RequestSerial,
+	TWeakObjectPtr<UWeaponAnimationProfile> RequestedProfile)
+{
+	if (RequestSerial != AnimationProfileRequestSerial
+		|| RequestedProfile.Get() != CurrentAnimationProfile.Get())
+	{
+		return;
+	}
+
+	bAnimationProfileReady = true;
+	TryBroadcastEquippedAnimation();
+}
+
+void UWeaponPresentationComponent::CancelAnimationProfileLoad()
+{
+	++AnimationProfileRequestSerial;
+	if (AnimationProfileLoadHandle.IsValid()
+		&& !AnimationProfileLoadHandle->HasLoadCompleted())
+	{
+		AnimationProfileLoadHandle->CancelHandle();
+	}
+
+	AnimationProfileLoadHandle.Reset();
+}
+
+void UWeaponPresentationComponent::BindAnimationContextCharacter()
+{
+	UnbindAnimationContextCharacter();
+
+	AnimationContextCharacter = Cast<ANXCharacterBase>(GetOwner());
+	if (IsValid(AnimationContextCharacter.Get()))
+	{
+		AnimationContextCharacter->OnCharacterAnimationFamilyChanged.AddUniqueDynamic(
+			this,
+			&UWeaponPresentationComponent::HandleCharacterAnimationFamilyChanged);
+	}
+}
+
+void UWeaponPresentationComponent::UnbindAnimationContextCharacter()
+{
+	if (IsValid(AnimationContextCharacter.Get()))
+	{
+		AnimationContextCharacter->OnCharacterAnimationFamilyChanged.RemoveDynamic(
+			this,
+			&UWeaponPresentationComponent::HandleCharacterAnimationFamilyChanged);
+	}
+
+	AnimationContextCharacter.Reset();
 }
 
 void UWeaponPresentationComponent::BindWeaponEvents(AWeaponBase* Weapon)
@@ -784,6 +1101,7 @@ void UWeaponPresentationComponent::BindWeaponEvents(AWeaponBase* Weapon)
 	Weapon->OnReloadStarted.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleReloadStarted);
 	Weapon->OnReloadFinished.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleReloadFinished);
 	Weapon->OnReloadCanceled.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleReloadCanceled);
+	Weapon->OnWeaponDataChanged.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleWeaponDataChanged);
 }
 
 void UWeaponPresentationComponent::UnbindWeaponEvents(AWeaponBase* Weapon)
@@ -797,6 +1115,7 @@ void UWeaponPresentationComponent::UnbindWeaponEvents(AWeaponBase* Weapon)
 	Weapon->OnReloadStarted.RemoveDynamic(this, &UWeaponPresentationComponent::HandleReloadStarted);
 	Weapon->OnReloadFinished.RemoveDynamic(this, &UWeaponPresentationComponent::HandleReloadFinished);
 	Weapon->OnReloadCanceled.RemoveDynamic(this, &UWeaponPresentationComponent::HandleReloadCanceled);
+	Weapon->OnWeaponDataChanged.RemoveDynamic(this, &UWeaponPresentationComponent::HandleWeaponDataChanged);
 }
 
 void UWeaponPresentationComponent::HandleNiagaraSystemFinished(UNiagaraComponent* FinishedComponent)
@@ -813,6 +1132,7 @@ void UWeaponPresentationComponent::SetCurrentWeapon(AWeaponBase* NewWeapon)
 	if (CurrentWeapon == NewWeapon)
 	{
 		UpdatePresentationState();
+		ResolveAnimationProfile(false);
 		TryBroadcastEquippedAnimation();
 		return;
 	}
@@ -845,6 +1165,7 @@ void UWeaponPresentationComponent::SetCurrentWeapon(AWeaponBase* NewWeapon)
 	BindWeaponEvents(CurrentWeapon.Get());
 
 	UpdatePresentationState();
+	ResolveAnimationProfile(true);
 	TryBroadcastEquippedAnimation();
 }
 

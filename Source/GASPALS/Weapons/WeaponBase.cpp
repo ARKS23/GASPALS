@@ -206,6 +206,8 @@ void AWeaponBase::SetWeaponData(UWeaponDataAsset* NewWeaponData, bool bResetAmmo
 		UpdateAccuracyContextRefreshTimer();
 		BroadcastAmmoChanged();
 	}
+
+	OnWeaponDataChanged.Broadcast(this);
 }
 
 bool AWeaponBase::StartFire()
