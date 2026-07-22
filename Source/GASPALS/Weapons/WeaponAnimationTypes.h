@@ -37,11 +37,13 @@ struct GASPALS_API FWeaponAnimationSelectionContext
 {
 	GENERATED_BODY()
 
+	// UE 5.8 的 Chooser Gameplay Tag 列只接受 TagContainer；当前容器仍只放一个角色动画族标签。
 	UPROPERTY(BlueprintReadOnly, Category="Weapon|Animation")
-	FGameplayTag CharacterAnimationFamily;
+	FGameplayTagContainer CharacterAnimationFamily;
 
+	// 数据源保持单个 GameplayTag，在生成查询快照时包装为容器供 Chooser 绑定。
 	UPROPERTY(BlueprintReadOnly, Category="Weapon|Animation")
-	FGameplayTag WeaponAnimationFamily;
+	FGameplayTagContainer WeaponAnimationFamily;
 
 	UPROPERTY(BlueprintReadOnly, Category="Weapon|Animation")
 	EWeaponAnimationViewMode ViewMode = EWeaponAnimationViewMode::ThirdPerson;

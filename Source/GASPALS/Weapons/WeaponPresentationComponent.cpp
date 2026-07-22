@@ -934,15 +934,23 @@ FWeaponAnimationSelectionContext UWeaponPresentationComponent::BuildAnimationSel
 
 	if (IsValid(AnimationContextCharacter.Get()))
 	{
-		SelectionContext.CharacterAnimationFamily =
+		const FGameplayTag CharacterAnimationFamily =
 			AnimationContextCharacter->GetCharacterAnimationFamily();
+		if (CharacterAnimationFamily.IsValid())
+		{
+			SelectionContext.CharacterAnimationFamily.AddTag(CharacterAnimationFamily);
+		}
 	}
 
 	if (IsValid(CurrentWeapon.Get()))
 	{
 		if (const UWeaponDataAsset* WeaponData = CurrentWeapon->GetWeaponData())
 		{
-			SelectionContext.WeaponAnimationFamily = WeaponData->WeaponAnimationFamily;
+			if (WeaponData->WeaponAnimationFamily.IsValid())
+			{
+				SelectionContext.WeaponAnimationFamily.AddTag(
+					WeaponData->WeaponAnimationFamily);
+			}
 		}
 	}
 
