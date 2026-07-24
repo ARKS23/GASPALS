@@ -184,22 +184,23 @@ Combat.State.TestAbilityActive
 
 1. 构造函数使用 `CreateDefaultSubobject<UAbilitySystemComponent>()` 创建唯一 ASC。
 2. 调用 `SetIsReplicated(true)`，并使用 `Mixed` Replication Mode。
-3. 实现 `GetAbilitySystemComponent()`。
-4. 在 PlayerState 暴露：
+3. 把 PlayerState 的初始 `NetUpdateFrequency` 从引擎默认 `1Hz` 提高到 `30Hz`；联机阶段再按带宽测试调优。
+4. 实现 `GetAbilitySystemComponent()`。
+5. 在 PlayerState 暴露：
 
    ```cpp
    TArray<TSubclassOf<UGameplayAbility>> StartupAbilities;
    void InitializeAbilitySystem(AActor* AvatarActor);
    ```
 
-5. `InitializeAbilitySystem()` 验证 Avatar 后执行：
+6. `InitializeAbilitySystem()` 验证 Avatar 后执行：
 
    ```cpp
    AbilitySystemComponent->InitAbilityActorInfo(this, AvatarActor);
    ```
 
-6. ActorInfo 就绪后，仅在 Authority 调用私有 `GrantStartupAbilities()`。
-7. 授予前检查空 Class 和已有 Ability Spec；可配合 `bStartupAbilitiesGranted`，保证多次初始化仍只授予一次。
+7. ActorInfo 就绪后，仅在 Authority 调用私有 `GrantStartupAbilities()`。
+8. 授予前检查空 Class 和已有 Ability Spec；配合 `bStartupAbilitiesGranted`，保证多次初始化仍只授予一次。
 
 PlayerState 的 `BeginPlay` 不应使用自身冒充 Avatar。PlayerState 可以早于 Pawn 存在，ActorInfo 必须等角色传入真实 Avatar 后再初始化。
 
@@ -258,6 +259,8 @@ CanBeCanceled       = true
 
 UE 5.8 中默认标签通过 `SetAssetTags()` 设置，不继续写已弃用的可变 `AbilityTags` 字段。
 
+`SetCanBeCanceled()` 是激活后实例使用的运行时 API；Instanced Ability 会在 `PreActivate` 时默认进入可取消状态，因此不要在 CDO 构造函数中调用它。
+
 `ActivateAbility()`：
 
 1. 调用 `CommitAbility()`。
@@ -311,10 +314,10 @@ Y 键
 
 ### 7.1 编译与配置检查
 
-- [ ] UnrealHeaderTool、Runtime Module 编译和链接通过。
-- [ ] 编辑器成功加载 `GameplayAbilities`。
-- [ ] `BP_NXPlayerState`、项目 GameMode 和 `BP_PlayerCharacter` 编译无错误。
-- [ ] 当前关卡实际 GameMode 的 PlayerState Class 为 `BP_NXPlayerState`。
+- [x] UnrealHeaderTool、Runtime Module 编译和链接通过。
+- [x] 编辑器成功加载 `GameplayAbilities`。
+- [x] `BP_NXPlayerState`、项目 GameMode 和 `BP_PlayerCharacter` 编译无错误。
+- [x] 当前关卡实际 GameMode 的 PlayerState Class 为 `BP_NXPlayerState`。
 
 ### 7.2 Owner/Avatar 与 Ability 生命周期
 
@@ -338,6 +341,8 @@ Y 键
 7. 按 `Y`，确认 Ability 结束且 Active Tag 消失。
 8. 再次按 `T`，确认 Ability 可以重新激活。
 9. 重新进入 PIE，Owner/Avatar 仍正确，Startup Ability 数量仍为一个。
+
+验证记录（2026-07-24）：连续四轮激活与取消均成功；Owner 为 `BP_NXPlayerState_C_0`，Avatar 为 `BP_PlayerCharacter_C_0`，并始终复用同一个 `SpecHandle=3`。这说明 Owner/Avatar 绑定正确，Startup Ability 没有被重复授予，Ability 可以结束后重新激活。
 
 本阶段不要求完成真实重生测试；重生开发时必须另行验证同一 PlayerState ASC 绑定到新 Character。
 
@@ -368,31 +373,31 @@ Y 键
 
 ## 9. 阶段验收标准
 
-- [ ] GAS 插件、模块依赖和编辑器加载稳定。
-- [ ] `ANXPlayerState` 正确实现 `IAbilitySystemInterface` 并持有唯一、可复制 ASC。
-- [ ] `ANXCharacterBase` 正确实现接口并转发 PlayerState ASC，自身没有第二个 ASC。
-- [ ] OwnerActor 是 `BP_NXPlayerState`，AvatarActor 是 `BP_PlayerCharacter`。
-- [ ] Startup Ability 仅由服务端授予一次。
-- [ ] Ability 可按 Tag 激活、保持 Active、取消并再次激活。
-- [ ] ActivationOwnedTag 自动添加和移除。
-- [ ] 项目侧 GameMode 正确使用 `BP_NXPlayerState`，未修改插件 GameMode。
-- [ ] 没有新增 AttributeSet、Effect、Cue、Montage、伤害或实际重生逻辑。
-- [ ] 持久数据和重生重置数据的边界已明确。
+- [x] GAS 插件、模块依赖和编辑器加载稳定。
+- [x] `ANXPlayerState` 正确实现 `IAbilitySystemInterface` 并持有唯一、可复制 ASC。
+- [x] `ANXCharacterBase` 正确实现接口并转发 PlayerState ASC，自身没有第二个 ASC。
+- [x] OwnerActor 是 `BP_NXPlayerState`，AvatarActor 是 `BP_PlayerCharacter`。
+- [x] Startup Ability 仅由服务端授予一次。
+- [x] Ability 可按 Tag 激活、保持 Active、取消并再次激活。
+- [x] ActivationOwnedTag 自动添加和移除。
+- [x] 项目侧 GameMode 正确使用 `BP_NXPlayerState`，未修改插件 GameMode。
+- [x] 没有新增 AttributeSet、Effect、Cue、Montage、伤害或实际重生逻辑。
+- [x] 持久数据和重生重置数据的边界已明确。
 - [ ] 现有枪械与 GASPALS 功能回归通过。
-- [ ] 完整冷编译通过，新增 C++ 代码包含必要中文注释。
+- [x] 完整冷编译通过，新增 C++ 代码包含必要中文注释。
 
 ## 10. 进度跟踪
 
 | 工作项 | 状态 |
 |---|---|
 | 1. 启用插件和 Build.cs 依赖 | 已完成 |
-| 2. 新增 Native Gameplay Tags | 待开发 |
-| 3. 新增 NXPlayerState 并接入 ASC | 待开发 |
-| 4. NXCharacterBase 接入 Avatar 初始化与转发 | 待开发 |
-| 5. 实现 NXGA_TestAbility | 待开发 |
-| 6. 创建 BP_NXPlayerState 并配置项目 GameMode | 待开发 |
-| 7. BP_PlayerCharacter 添加临时输入 | 待开发 |
-| 8. Owner/Avatar 与 Ability 生命周期测试 | 待测试 |
+| 2. 新增 Native Gameplay Tags | 已完成 |
+| 3. 新增 NXPlayerState 并接入 ASC | 已完成 |
+| 4. NXCharacterBase 接入 Avatar 初始化与转发 | 已完成 |
+| 5. 实现 NXGA_TestAbility | 已完成 |
+| 6. 创建 BP_NXPlayerState 并配置项目 GameMode | 已完成 |
+| 7. BP_PlayerCharacter 添加临时输入 | 已完成 |
+| 8. Owner/Avatar 与 Ability 生命周期测试 | 已完成 |
 | 9. 枪械/GASPALS 回归与系统文档同步 | 待测试 |
 
 实现过程中每完成一个工作项就更新本表，不在最后一次性修改全部状态。

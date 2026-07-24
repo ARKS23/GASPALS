@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AbilitySystemInterface.h"
 #include "GameFramework/Character.h"
 #include "GameplayTagContainer.h"
 #include "../Weapons/NXWeaponAccuracyContextProvider.h"
@@ -10,6 +11,7 @@
 class ANXCharacterBase;
 class UAnimInstance;
 class UAnimMontage;
+class UAbilitySystemComponent;
 class UCombatComponent;
 class UWeaponPresentationComponent;
 
@@ -21,16 +23,30 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 /**
  * NexAur 项目的角色 C++ 基类。
  *
- * 该类提供所有项目角色都可以复用的基础查询接口，并执行表现组件已经解析好的
- * 角色 Montage 指令。它不决定开火、换弹或装备是否合法，也不负责选择动画资产。
+ * 该类提供所有项目角色都可以复用的基础查询和 GAS 转发入口，并执行表现组件
+ * 已经解析好的角色 Montage 指令。它不决定开火、换弹或装备是否合法，也不负责选择动画资产。
  */
 UCLASS(Blueprintable)
-class GASPALS_API ANXCharacterBase : public ACharacter, public INXWeaponAccuracyContextProvider
+class GASPALS_API ANXCharacterBase
+	: public ACharacter
+	, public IAbilitySystemInterface
+	, public INXWeaponAccuracyContextProvider
 {
 	GENERATED_BODY()
 
 public:
 	ANXCharacterBase(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+	/** 转发当前 ANXPlayerState 持有的 ASC；PlayerState 尚未就绪时返回 nullptr。 */
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	/** 按 Ability Asset Tag 请求激活已授予的 Ability。 */
+	UFUNCTION(BlueprintCallable, Category="NexAur|AbilitySystem")
+	bool TryActivateAbilityByTag(FGameplayTag AbilityTag);
+
+	/** 取消所有带有指定 Ability Asset Tag 的活动 Ability。 */
+	UFUNCTION(BlueprintCallable, Category="NexAur|AbilitySystem")
+	void CancelAbilitiesByTag(FGameplayTag AbilityTag);
 
 	/** 组合角色当前状态，向武器提供只读精度上下文。 */
 	virtual FNXWeaponAccuracyContext GetWeaponAccuracyContext_Implementation() const override;
@@ -72,6 +88,8 @@ protected:
 	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_PlayerState() override;
 
 	/**
 	 * 缓存由蓝图添加的项目组件。
@@ -89,6 +107,9 @@ protected:
 	FGameplayTag CharacterAnimationFamily;
 
 private:
+	/** 从当前 PlayerState 建立 GAS Owner/Avatar 关系，不在角色上创建或缓存第二个 ASC。 */
+	void InitializeAbilitySystemFromPlayerState();
+
 	/** 在所有蓝图组件完成实例化后绑定；重复调用不会产生重复监听。 */
 	void BindWeaponAnimationExecutor();
 	void UnbindWeaponAnimationExecutor();
@@ -98,12 +119,8 @@ private:
 		UWeaponPresentationComponent* PresentationComponent,
 		const FWeaponAnimationCue& AnimationCue);
 
-	bool PlayWeaponAnimationCue(
-		UAnimInstance& AnimInstance,
-		const FWeaponAnimationCue& AnimationCue);
-	void StopWeaponAnimationCue(
-		UAnimInstance& AnimInstance,
-		const FWeaponAnimationCue& AnimationCue);
+	bool PlayWeaponAnimationCue(UAnimInstance& AnimInstance, const FWeaponAnimationCue& AnimationCue);
+	void StopWeaponAnimationCue(UAnimInstance& AnimInstance, const FWeaponAnimationCue& AnimationCue);
 	void StopAllWeaponAnimationMontages(UAnimInstance& AnimInstance, float BlendOutTime);
 	void PruneInactiveWeaponAnimationMontages(const UAnimInstance& AnimInstance);
 

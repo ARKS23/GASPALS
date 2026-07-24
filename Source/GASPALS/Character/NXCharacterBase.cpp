@@ -1,13 +1,16 @@
 #include "NXCharacterBase.h"
 
 #include "../Combat/CombatComponent.h"
+#include "../Player/NXPlayerState.h"
 #include "../Weapons/WeaponPresentationComponent.h"
+#include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNXCharacterAnimation, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogNXCharacterAbilitySystem, Log, All);
 
 ANXCharacterBase::ANXCharacterBase(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -22,6 +25,94 @@ void ANXCharacterBase::PostInitializeComponents()
 
 	// 此时蓝图 SCS 组件已经实例化，同时早于组件 BeginPlay 可能发出的装备表现事件。
 	BindWeaponAnimationExecutor();
+}
+
+void ANXCharacterBase::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	// PossessedBy 只在服务端（或 Standalone）触发，此时 PlayerState 已完成权威绑定。
+	InitializeAbilitySystemFromPlayerState();
+}
+
+void ANXCharacterBase::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	// 客户端收到 PlayerState 后，为本地复制的 ASC 建立相同 Owner/Avatar 关系。
+	InitializeAbilitySystemFromPlayerState();
+}
+
+UAbilitySystemComponent* ANXCharacterBase::GetAbilitySystemComponent() const
+{
+	const ANXPlayerState* NXPlayerState = GetPlayerState<ANXPlayerState>();
+	return IsValid(NXPlayerState)
+		? NXPlayerState->GetAbilitySystemComponent()
+		: nullptr;
+}
+
+bool ANXCharacterBase::TryActivateAbilityByTag(FGameplayTag AbilityTag)
+{
+	if (!AbilityTag.IsValid())
+	{
+		UE_LOG(LogNXCharacterAbilitySystem, Warning,
+			TEXT("角色 %s 无法激活 Ability：传入的 Gameplay Tag 无效。"),
+			*GetNameSafe(this));
+		return false;
+	}
+
+	UAbilitySystemComponent* AbilitySystemComponent = GetAbilitySystemComponent();
+	if (!IsValid(AbilitySystemComponent))
+	{
+		UE_LOG(LogNXCharacterAbilitySystem, Warning,
+			TEXT("角色 %s 无法激活 Ability：ANXPlayerState 或 ASC 尚未就绪。"),
+			*GetNameSafe(this));
+		return false;
+	}
+
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(AbilityTag);
+	return AbilitySystemComponent->TryActivateAbilitiesByTag(AbilityTags);
+}
+
+void ANXCharacterBase::CancelAbilitiesByTag(FGameplayTag AbilityTag)
+{
+	if (!AbilityTag.IsValid())
+	{
+		UE_LOG(LogNXCharacterAbilitySystem, Warning,
+			TEXT("角色 %s 无法取消 Ability：传入的 Gameplay Tag 无效。"),
+			*GetNameSafe(this));
+		return;
+	}
+
+	UAbilitySystemComponent* AbilitySystemComponent = GetAbilitySystemComponent();
+	if (!IsValid(AbilitySystemComponent))
+	{
+		UE_LOG(LogNXCharacterAbilitySystem, Warning,
+			TEXT("角色 %s 无法取消 Ability：ANXPlayerState 或 ASC 尚未就绪。"),
+			*GetNameSafe(this));
+		return;
+	}
+
+	FGameplayTagContainer AbilityTags;
+	AbilityTags.AddTag(AbilityTag);
+	AbilitySystemComponent->CancelAbilities(&AbilityTags);
+}
+
+void ANXCharacterBase::InitializeAbilitySystemFromPlayerState()
+{
+	ANXPlayerState* NXPlayerState = GetPlayerState<ANXPlayerState>();
+	if (!IsValid(NXPlayerState))
+	{
+		const APlayerState* CurrentPlayerState = GetPlayerState();
+		UE_LOG(LogNXCharacterAbilitySystem, Warning,
+			TEXT("角色 %s 无法初始化 GAS：当前 PlayerState %s 不是 ANXPlayerState。"),
+			*GetNameSafe(this),
+			*GetNameSafe(CurrentPlayerState));
+		return;
+	}
+
+	NXPlayerState->InitializeAbilitySystem(this);
 }
 
 FNXWeaponAccuracyContext ANXCharacterBase::GetWeaponAccuracyContext_Implementation() const
