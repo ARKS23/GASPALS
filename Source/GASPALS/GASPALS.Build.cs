@@ -8,7 +8,17 @@ public class GASPALS : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "GameplayTags", "InputCore", "UMG" });
+		PublicDependencyModuleNames.AddRange(new string[]
+		{
+			"Core",
+			"CoreUObject",
+			"Engine",
+			"GameplayAbilities",
+			"GameplayTags",
+			"GameplayTasks",
+			"InputCore",
+			"UMG"
+		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "Chooser", "GameplayCameras", "Niagara" });
 

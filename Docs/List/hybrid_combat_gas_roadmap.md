@@ -1,0 +1,248 @@
+# NexAur 混合战斗与 GAS 总计划
+
+> 文档定位：本文件是“魂类近战为核心、枪械为可获得战斗方式”的上层路线图。
+> 它用于约束后续架构、任务文档和开发顺序，不替代每个阶段的详细开发文档。
+
+## 1. 项目目标
+
+构建一套同时支持以下玩法的第三人称战斗框架：
+
+- 魂类近战：轻攻击、重攻击、连击、格挡、招架、闪避、体力、削韧和受击反应。
+- 枪械战斗：瞄准、半自动/全自动射击、换弹、散布、后坐力和命中反馈。
+- 数据驱动：更换武器或角色动画集时，优先修改 DataAsset、Chooser 和 Gameplay Tags。
+- GAS 兼容：动作许可、消耗、冷却、状态和效果逐步由 Gameplay Ability System 管理。
+- GASPALS 兼容：继续复用移动、Traversal、Overlay、相机和基础 AnimBP，不把玩法逻辑写回插件蓝图。
+
+## 2. 当前基线
+
+已经具备：
+
+- `ANXCharacterBase` 角色基类和统一 Montage 执行入口。
+- `CombatComponent -> WeaponComponent -> WeaponBase` 枪械请求链。
+- `WeaponPresentationComponent` 的动画、音效、VFX、Tracer、Impact 和后坐表现。
+- `WeaponAnimationProfile + Chooser` 数据驱动动画选择。
+- GASPALS Rifle/Pistol Overlay、手部 IK 与 `NXWeaponAction` Slot。
+- `HealthComponent`、HUD、射击伤害和测试目标。
+- Gameplay Tags 和 Chooser 模块依赖。
+
+当前限制：
+
+- `AWeaponBase`、`UWeaponDataAsset` 和 `UWeaponComponent` 仍以枪械语义为主。
+- 动画 Cue 固定为 Fire/Reload/Equip/Unequip，不适合持续增加近战动作。
+- 尚未启用 `GameplayAbilities`，没有 ASC、Ability、AttributeSet 或 GameplayEffect。
+- 生命值当前由 `HealthComponent` 维护，不能同时再建立第二套 GAS Health 权威数据。
+
+枪械 Fire 动画美术打磨暂缓，但现有枪械链必须作为后续回归基线保留。
+
+## 3. 架构原则
+
+1. **不推翻枪械系统**：先用 GAS Ability 包装现有接口，再按收益逐步迁移。
+2. **不让近战继承枪械实现**：近战不能被迫携带弹药、换弹、散布和枪口字段。
+3. **一个动作入口**：输入只提交动作意图，不直接播放 Montage、扣血或执行 Sweep。
+4. **一个状态权威**：同一份生命、体力或动作状态只能有一个运行时数据源。
+5. **语义使用 Gameplay Tags**：不持续扩展 LightAttack1、Parry 等固定枚举。
+6. **Ability 不硬编码动画**：Ability 提供动作语义，Profile/Chooser 解析具体资源。
+7. **玩法与表现分离**：Ability/武器决定结果，表现层消费不可变 Cue，不反向决定 Gameplay。
+8. **组件数量受控**：角色侧保持装备、战斗动作、表现三个主要边界；武器差异放在 Actor 和数据中。
+9. **渐进式 GAS**：先接近战动作和体力，再迁移伤害、枪械和联机表现。
+
+## 4. 目标结构
+
+```text
+ANXPlayerState
+├── AbilitySystemComponent
+├── Startup Ability Specs
+└── AttributeSets                // 后续阶段接入
+
+ANXCharacterBase                 // 玩家 ASC 的 AvatarActor
+├── CombatComponent              // 现有组件演化为输入/GAS 动作门面
+├── EquipmentComponent           // 由现有 WeaponComponent 渐进演化
+├── CombatPresentationComponent  // 由现有 WeaponPresentationComponent 渐进演化
+├── PlayerRecoilComponent        // 枪械专用
+└── HealthComponent              // GAS Health 迁移前保留
+
+ANXEquipmentBase
+├── ANXRangedWeapon              // 承接当前 AWeaponBase 枪械逻辑
+└── ANXMeleeWeapon               // 攻击窗口、Sweep 和近战运行时状态
+```
+
+上述名称表示长期职责，不要求把新旧组件同时挂在角色上。迁移完成前继续使用现有类名和蓝图引用，确认调用方全部切换后再决定是否重命名。
+
+各层职责：
+
+| 层 | 负责 | 不负责 |
+|---|---|---|
+| Equipment | 当前装备、槽位、生成、附着、卸装 | 攻击是否合法、伤害结算 |
+| GAS Ability | 动作许可、标签、消耗、冷却、中断和生命周期 | 选择具体动画资源、直接生成表现 |
+| Weapon Actor | 射线/Sweep、弹药或命中几何、武器运行时状态 | 输入绑定、HUD 拼接 |
+| Presentation | Montage、音效、VFX、相机反馈 | 扣血、扣体力、判定攻击成功 |
+| DataAsset/Profile | 静态数值、资源引用、动画映射 | 当前弹药、当前体力、动作运行状态 |
+
+## 5. Gameplay Tags 规划
+
+动作与状态从以下命名空间起步：
+
+```text
+Combat.Action.Attack.Light
+Combat.Action.Attack.Heavy
+Combat.Action.Block
+Combat.Action.Parry
+Combat.Action.Dodge
+Combat.Action.WeaponSkill
+Combat.Action.Fire
+Combat.Action.Reload
+
+Combat.State.Attacking
+Combat.State.Guarding
+Combat.State.Parrying
+Combat.State.Dodging
+Combat.State.Invulnerable
+Combat.State.Staggered
+Combat.State.Dead
+
+Equipment.Category.Melee.Sword.OneHanded
+Equipment.Category.Ranged.Rifle
+Animation.Stance.Sword.OneHanded
+Animation.Stance.Rifle
+```
+
+动画条目长期以 `ActionTag` 查找 Montage，不继续扩展 `EWeaponAnimationCueType`。现有枪械枚举在迁移期间保留兼容。
+
+## 6. GAS 接入边界
+
+玩家 ASC 从第一阶段开始放在 `ANXPlayerState`，以支持后续销毁旧 Pawn、生成新 Pawn 的重生流程。PlayerState 是 OwnerActor，当前 `ANXCharacterBase` 是 AvatarActor；重生后只替换 Avatar，不重新创建 ASC 或重复授予永久 Ability。AI 后续仍可把 ASC 放在 AI Character，并通过同一个 `IAbilitySystemInterface` 对外暴露。
+
+GAS 负责：
+
+- Ability 激活条件、Block/Cancel Tags 和动作互斥。
+- 体力消耗、冷却和状态效果。
+- 轻攻击、重攻击、格挡、招架、闪避等动作生命周期。
+- 后续的伤害、削韧、Buff/Debuff 和联机预测。
+
+现有系统继续负责：
+
+- 枪械 Actor 的弹药、射速、射线、散布和换弹计时。
+- 近战武器 Actor 的 Sweep 几何和单次窗口命中去重。
+- DataAsset、Chooser 和 Profile 的资源解析。
+- GASPALS Overlay、角色 AnimBP 和表现挂载点。
+
+初期不要把弹匣弹药放进 AttributeSet。Health 在完成正式迁移前继续由 `HealthComponent` 单独维护。
+
+## 7. 开发阶段
+
+| 阶段 | 目标 | 核心验收 | 状态 |
+|---|---|---|---|
+| 0 | 冻结并记录枪械基线 | 射击、换弹、HUD、Overlay 可回归 | 已具备 |
+| 1 | [GAS 基础设施](./phase_01_gas_foundation.md) | ASC 初始化、Tag 激活、Ability 授予与取消正常 | 待开发 |
+| 2 | 通用动作与装备契约 | 同一入口可识别近战/枪械装备，不复制两套装备状态 | 待开发 |
+| 3 | 单手剑最小闭环 | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 待开发 |
+| 4 | 魂类基础状态 | 体力、重攻击、闪避、格挡、招架、硬直 | 待开发 |
+| 5 | 连击与动画数据驱动 | 输入缓存、取消窗口、Combo 分支、Chooser/Profile 换资源 | 待开发 |
+| 6 | 枪械 GAS 适配 | Fire/Reload Ability 包装现有 WeaponBase，枪械行为不回归 | 待开发 |
+| 7 | Attribute/Effect 迁移 | Health、Damage、Poise 统一进入 AttributeSet/GameplayEffect | 待开发 |
+| 8 | 联机与 GameplayCue | 权威、预测、复制和远端表现验证 | 延后 |
+
+### 阶段 1：GAS 基础设施
+
+- 启用 `GameplayAbilities` 插件。
+- 在 Build.cs 增加 `GameplayAbilities`、`GameplayTasks`；保留现有 `GameplayTags`。
+- 新增 `ANXPlayerState`，由它实现 `IAbilitySystemInterface`、持有 ASC 并唯一授予 Startup Abilities。
+- `ANXCharacterBase` 转发 PlayerState ASC，并在 `PossessedBy/OnRep_PlayerState` 中初始化 Owner/Avatar ActorInfo。
+- 在项目侧 GameMode 配置 `ANXPlayerState` 子类，不修改 GASPALS 插件 GameMode。
+- 建立 Native Gameplay Tags 和 Ability 授予流程。
+- 新增最小测试 Ability，验证激活、取消、状态标签和生命周期。
+- 暂不迁移枪械、Health 和 HUD。
+
+### 阶段 2：通用动作与装备契约
+
+- 定义 `FNXCombatActionRequest/Cue`，核心标识使用 `FGameplayTag`；只有出现真实调用需求时再增加 Result 类型。
+- `CombatComponent` 逐步成为输入门面，调用 ASC 激活动作。
+- 抽取通用装备基类与装备数据；枪械和近战使用各自子类。
+- 保留当前 `UWeaponComponent` API 作为迁移适配，不进行一次性重命名。
+- 动画解析开始支持 `ActionTag + CharacterFamily + EquipmentFamily + ViewMode`。
+
+### 阶段 3：单手剑最小闭环
+
+- 只选择一把剑和一条轻攻击动画完成端到端验证。
+- 创建 Sword Overlay，负责持剑待机和移动姿势。
+- 创建 Light Attack Ability，使用数据解析后的 Montage。
+- 使用 `AnimNotifyState` 打开和关闭命中窗口。
+- 武器在窗口内对起止 Socket 做 Sweep，并对同一目标去重。
+- 伤害先通过适配器写入现有 `HealthComponent`。
+- 动画中断、死亡或卸装必须关闭命中窗口并清理状态。
+
+### 阶段 4-5：魂类战斗扩展
+
+- 体力成为第一项 GAS Attribute；攻击、格挡和闪避通过 GameplayEffect 消耗。
+- 加入重攻击、蓄力、闪避无敌帧、格挡减伤、招架窗口和削韧。
+- 增加输入缓存、Combo 窗口和动作取消规则。
+- 锁定系统和攻击朝向单独设计，不塞进武器 Actor。
+- Root Motion 使用策略必须在批量接入动画前确定。
+
+### 阶段 6-8：枪械迁移与联机
+
+- `GA_WeaponFire/Reload` 先调用现有 `WeaponBase`，不复制射击公式。
+- 每种运行时数据只保留一个权威来源；迁移完成后再删除旧入口。
+- GameplayCue 优先用于需要复制的枪口、Impact 和受击表现；本地相机后坐继续由本地玩家组件执行。
+- 联机阶段验证 PlayerState ASC 的复制、预测、Pawn 重生重绑和临时效果清理策略。
+
+## 8. 动画与资源规则
+
+- 项目目标骨架继续使用 UEFN Mannequin。
+- 先重定向单条动画验证，再批量处理资源包。
+- 持续姿势放在 GASPALS Overlay；攻击、格挡、闪避和处决使用 Montage。
+- Reload/Equip 使用全姿势动作层；枪械 Recoil 后续使用独立 Additive 层。
+- 近战攻击优先选择 In Place 或明确支持 Root Motion 的统一资源集。
+- Marketplace 原始资源与项目派生动画分目录管理；代码提交与大体积资源提交分开。
+- Ability 不直接引用商城原始资源，统一引用项目侧 Profile/DataAsset。
+
+## 9. 命中与伤害规则
+
+- 近战不复用 `FWeaponShotEvent`，新增通用 Combat Hit 数据。
+- 每个攻击窗口维护已命中 Actor 集合，默认一次窗口只命中同一目标一次。
+- Sweep 只负责几何命中；Ability/GameplayEffect 负责伤害、体力、削韧和状态。
+- Anim Notify 只发送窗口事件，不直接扣血或决定攻击是否合法。
+- `HealthComponent` 与 GAS Health Attribute 不得同时写生命值。
+
+## 10. 后续文档规范
+
+每个阶段开始前，在 `Docs/05_tasks` 下建立独立任务文档。推荐目录：
+
+```text
+Docs/05_tasks/gas/
+Docs/05_tasks/combat/
+Docs/05_tasks/melee/
+```
+
+每份任务文档保持教程式结构，并至少包含：
+
+1. 目标与非目标。
+2. 当前调用链和目标调用链。
+3. C++ 文件及职责。
+4. 编辑器、DataAsset、Gameplay Tags 和蓝图接入步骤。
+5. 数据流、状态权威与失败回退。
+6. 测试场景和验收清单。
+7. 风险、迁移和回滚方式。
+8. 开发进度状态。
+
+开发完成并验收后，在 `Docs/system` 新增或更新“实际运行链”文档。总计划只维护阶段状态和链接，不堆积实现细节。
+
+## 11. 质量门槛
+
+- C++ 完整 UHT、编译和链接通过。
+- `BP_PlayerCharacter`、关键 AnimBP、Chooser 和 DataAsset 无编译错误。
+- 新增近战功能不得破坏现有 Rifle/Pistol、Reload、HUD 和 GASPALS 移动。
+- 蓝图只负责资源、AnimGraph 和界面表现，不维护重复 Gameplay 状态。
+- 失败动作不扣资源、不产生伤害、不生成成功表现。
+- 动作取消、死亡、切换装备和 EndPlay 都必须清理 Timer、Delegate、Montage 与命中窗口。
+- 新资源可通过 Profile/Chooser 替换，不要求修改核心 C++。
+
+## 12. 下一步
+
+阶段 1 开发文档已经建立：
+
+```text
+Docs/List/phase_01_gas_foundation.md
+```
+
+其范围只包含 GAS 插件与模块依赖、ASC 初始化、Gameplay Tags、Ability 授予和一个无伤害测试 Ability。后续阶段 1 开发和进度跟踪以该文档为准；通过基础验收后，再编写通用动作与装备契约文档，避免同时改造 GAS、装备、动画和伤害四条链。
