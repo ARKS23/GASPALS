@@ -4,7 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "WeaponComponent.generated.h"
 
-class AWeaponBase;
+class ANXRangedWeapon;
 class UWeaponComponent;
 class USkeletalMeshComponent;
 
@@ -12,8 +12,8 @@ class USkeletalMeshComponent;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	FOnCurrentWeaponChangedSignature,
 	UWeaponComponent*, WeaponComponent,
-	AWeaponBase*, OldWeapon,
-	AWeaponBase*, NewWeapon
+	ANXRangedWeapon*, OldWeapon,
+	ANXRangedWeapon*, NewWeapon
 );
 
 // 武器组件是角色和武器 Actor 之间的装备管理层。
@@ -28,10 +28,10 @@ public:
 
 	// 生成并装备一把武器。第一阶段只维护一把 CurrentWeapon。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
-	AWeaponBase* EquipWeapon(TSubclassOf<AWeaponBase> WeaponClass);
+	ANXRangedWeapon* EquipWeapon(TSubclassOf<ANXRangedWeapon> WeaponClass);
 
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
-	AWeaponBase* EquipDefaultWeapon();
+	ANXRangedWeapon* EquipDefaultWeapon();
 
 	// 卸下当前武器。默认销毁武器，适合当前“角色持有一把生成武器”的原型阶段。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
@@ -44,7 +44,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	bool ReattachCurrentWeapon();
 
-	// 以下函数只做请求转发，真正的开火、射速、弹药和命中逻辑都在 AWeaponBase。
+	// 以下函数只做请求转发，真正的开火、射速、弹药和命中逻辑都在 ANXRangedWeapon。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Fire")
 	bool StartFire();
 
@@ -59,13 +59,13 @@ public:
 	void CancelReload();
 	
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
-	bool AttachWeaponToOwner(AWeaponBase* Weapon) const;
+	bool AttachWeaponToOwner(ANXRangedWeapon* Weapon) const;
 
 	UFUNCTION(BlueprintPure, Category="Weapon|Equipment")
 	bool HasWeapon() const;
 
 	UFUNCTION(BlueprintPure, Category="Weapon|Equipment")
-	AWeaponBase* GetCurrentWeapon() const;
+	ANXRangedWeapon* GetCurrentWeapon() const;
 
 	UFUNCTION(BlueprintPure, Category="Weapon|Equipment")
 	USkeletalMeshComponent* GetOwnerMesh() const;
@@ -88,7 +88,7 @@ protected:
 
 	// BeginPlay 时自动装备的武器蓝图，例如 BP_Rifle。
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
-	TSubclassOf<AWeaponBase> DefaultWeaponClass;
+	TSubclassOf<ANXRangedWeapon> DefaultWeaponClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
 	bool bEquipDefaultWeaponOnBeginPlay = true;
@@ -110,16 +110,16 @@ protected:
 
 	// 当前装备武器的运行时引用。不要在蓝图里直接改它，使用 Equip/Unequip 接口。
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Equipment")
-	TObjectPtr<AWeaponBase> CurrentWeapon;
+	TObjectPtr<ANXRangedWeapon> CurrentWeapon;
 
 	// 给蓝图表现层的扩展点，例如切换 Overlay、播放拔枪动画或刷新 UI。
 	UFUNCTION(BlueprintImplementableEvent, Category="Weapon|Events")
-	void ReceiveCurrentWeaponChanged(AWeaponBase* OldWeapon, AWeaponBase* NewWeapon);
+	void ReceiveCurrentWeaponChanged(ANXRangedWeapon* OldWeapon, ANXRangedWeapon* NewWeapon);
 
 private:
 	// 内部辅助函数保持私有，避免外部绕过装备流程直接生成或附着武器。
-	AWeaponBase* SpawnWeapon(TSubclassOf<AWeaponBase> WeaponClass) const;
-	void ApplyLogicalWeaponPresentation(AWeaponBase* Weapon) const;
-	FName ResolveAttachSocketName(const AWeaponBase* Weapon) const;
-	void BroadcastCurrentWeaponChanged(AWeaponBase* OldWeapon, AWeaponBase* NewWeapon);
+	ANXRangedWeapon* SpawnWeapon(TSubclassOf<ANXRangedWeapon> WeaponClass) const;
+	void ApplyLogicalWeaponPresentation(ANXRangedWeapon* Weapon) const;
+	FName ResolveAttachSocketName(const ANXRangedWeapon* Weapon) const;
+	void BroadcastCurrentWeaponChanged(ANXRangedWeapon* OldWeapon, ANXRangedWeapon* NewWeapon);
 };

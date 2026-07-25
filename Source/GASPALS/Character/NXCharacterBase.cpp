@@ -1,5 +1,6 @@
 #include "NXCharacterBase.h"
 
+#include "../AbilitySystem/NXGameplayTags.h"
 #include "../Combat/CombatComponent.h"
 #include "../Player/NXPlayerState.h"
 #include "../Weapons/WeaponPresentationComponent.h"
@@ -49,6 +50,26 @@ UAbilitySystemComponent* ANXCharacterBase::GetAbilitySystemComponent() const
 	return IsValid(NXPlayerState)
 		? NXPlayerState->GetAbilitySystemComponent()
 		: nullptr;
+}
+
+bool ANXCharacterBase::RequestCombatAction(FGameplayTag ActionTag)
+{
+	if (!ActionTag.IsValid())
+	{
+		UE_LOG(LogNXCharacterAbilitySystem, Warning, TEXT("角色 %s 无法请求战斗动作：传入的 Gameplay Tag 无效。"), *GetNameSafe(this));
+		return false;
+	}
+
+	// 根标签只承担分类契约；必须传入 Combat.Action.Test 等具体动作，避免一次请求匹配多个 Ability。
+	if (ActionTag == NXGameplayTags::Combat_Action || !ActionTag.MatchesTag(NXGameplayTags::Combat_Action))
+	{
+		UE_LOG(LogNXCharacterAbilitySystem, Warning,
+			TEXT("角色 %s 无法请求战斗动作：标签 '%s' 必须是 Combat.Action 的具体子标签。"),
+			*GetNameSafe(this), *ActionTag.ToString());
+		return false;
+	}
+
+	return TryActivateAbilityByTag(ActionTag);
 }
 
 bool ANXCharacterBase::TryActivateAbilityByTag(FGameplayTag AbilityTag)

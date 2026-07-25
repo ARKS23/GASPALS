@@ -1,5 +1,8 @@
-#include "WeaponBase.h"
+#include "NXRangedWeapon.h"
 
+#include "../AbilitySystem/NXGameplayTags.h"
+#include "../Health/HealthComponent.h"
+#include "../Player/PlayerRecoilComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Core/CameraSystemEvaluator.h"
@@ -13,8 +16,6 @@
 #include "TimerManager.h"
 #include "WeaponDataAsset.h"
 #include "NXWeaponAccuracyContextProvider.h"
-#include "../Health/HealthComponent.h"
-#include "../Player/PlayerRecoilComponent.h"
 
 namespace
 {
@@ -96,7 +97,7 @@ bool TryGetGameplayCameraPreVisualAim(
 	return true;
 }
 
-FCollisionQueryParams MakeWeaponTraceQueryParams(const AWeaponBase* Weapon)
+FCollisionQueryParams MakeWeaponTraceQueryParams(const ANXRangedWeapon* Weapon)
 {
 	FCollisionQueryParams QueryParams(TEXT("WeaponTrace"), true, Weapon);
 
@@ -121,8 +122,10 @@ FCollisionQueryParams MakeWeaponTraceQueryParams(const AWeaponBase* Weapon)
 }
 }
 
-AWeaponBase::AWeaponBase()
+ANXRangedWeapon::ANXRangedWeapon()
 {
+	EquipmentCategory = NXGameplayTags::Equipment_Category_Ranged;
+
 	// 武器状态由输入和各类低频 Timer 驱动，不需要每帧 Tick。
 	PrimaryActorTick.bCanEverTick = false;
 
@@ -136,14 +139,19 @@ AWeaponBase::AWeaponBase()
 	WeaponMesh->SetGenerateOverlapEvents(false);
 }
 
-void AWeaponBase::BeginPlay()
+FGameplayTag ANXRangedWeapon::GetEquipmentAnimationFamily() const
+{
+	return IsValid(WeaponData.Get()) ? WeaponData->WeaponAnimationFamily : FGameplayTag();
+}
+
+void ANXRangedWeapon::BeginPlay()
 {
 	Super::BeginPlay();
 
 	InitializeWeapon();
 }
 
-void AWeaponBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+void ANXRangedWeapon::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	// 销毁前统一结束换弹，让仍然存活的表现监听者有机会清理临时状态。
 	CancelReload();
@@ -156,7 +164,7 @@ void AWeaponBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-void AWeaponBase::InitializeWeapon()
+void ANXRangedWeapon::InitializeWeapon()
 {
 	// 重新初始化前先走正式取消流程，避免静默清状态后遗留换弹表现。
 	CancelReload();
@@ -190,7 +198,7 @@ void AWeaponBase::InitializeWeapon()
 	BroadcastAmmoChanged();
 }
 
-void AWeaponBase::SetWeaponData(UWeaponDataAsset* NewWeaponData, bool bResetAmmo)
+void ANXRangedWeapon::SetWeaponData(UWeaponDataAsset* NewWeaponData, bool bResetAmmo)
 {
 	// 必须在替换配置前取消旧换弹，避免旧 Timer 最终使用新弹匣参数结算。
 	CancelReload();
@@ -210,7 +218,7 @@ void AWeaponBase::SetWeaponData(UWeaponDataAsset* NewWeaponData, bool bResetAmmo
 	OnWeaponDataChanged.Broadcast(this);
 }
 
-bool AWeaponBase::StartFire()
+bool ANXRangedWeapon::StartFire()
 {
 	// Enhanced Input 的 Started 理论上只触发一次；这里仍做幂等保护，避免蓝图误接 Triggered 后每帧重置射击节拍。
 	if (bWantsToFire)
@@ -231,13 +239,13 @@ bool AWeaponBase::StartFire()
 	return bFired;
 }
 
-void AWeaponBase::StopFire()
+void ANXRangedWeapon::StopFire()
 {
 	bWantsToFire = false;
 	ClearAutoFireTimer();
 }
 
-bool AWeaponBase::FireOnce()
+bool ANXRangedWeapon::FireOnce()
 {
 	FVector TraceStart = FVector::ZeroVector;
 	FVector TraceDirection = FVector::ForwardVector;
@@ -250,7 +258,7 @@ bool AWeaponBase::FireOnce()
 	return FireOnceFromTrace(TraceStart, TraceDirection);
 }
 
-bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& TraceDirection)
+bool ANXRangedWeapon::FireOnceFromTrace(const FVector& TraceStart, const FVector& TraceDirection)
 {
 	if (!CanFire())
 	{
@@ -335,7 +343,7 @@ bool AWeaponBase::FireOnceFromTrace(const FVector& TraceStart, const FVector& Tr
 	return true;
 }
 
-bool AWeaponBase::CanFire() const
+bool ANXRangedWeapon::CanFire() const
 {
 	// CanFire 只判断逻辑条件，不播放反馈，方便 UI 或组件安全查询。
 	if (!WeaponData || !WeaponData->IsValidWeaponData() || bIsReloading || CurrentAmmoInMagazine <= 0)
@@ -353,7 +361,7 @@ bool AWeaponBase::CanFire() const
 	return TimeSinceLastShot + KINDA_SMALL_NUMBER >= WeaponData->GetSecondsBetweenShots();
 }
 
-bool AWeaponBase::StartReload()
+bool ANXRangedWeapon::StartReload()
 {
 	if (!CanReload())
 	{
@@ -377,7 +385,7 @@ bool AWeaponBase::StartReload()
 	if (UWorld* World = GetWorld())
 	{
 		// 换弹时间结束后才真正转移弹药，便于中途打断或后续接动画通知。
-		World->GetTimerManager().SetTimer(ReloadTimerHandle, this, &AWeaponBase::FinishReload, WeaponData->ReloadTime, false);
+		World->GetTimerManager().SetTimer(ReloadTimerHandle, this, &ANXRangedWeapon::FinishReload, WeaponData->ReloadTime, false);
 	}
 	else
 	{
@@ -387,7 +395,7 @@ bool AWeaponBase::StartReload()
 	return true;
 }
 
-void AWeaponBase::FinishReload()
+void ANXRangedWeapon::FinishReload()
 {
 	if (!bIsReloading)
 	{
@@ -417,7 +425,7 @@ void AWeaponBase::FinishReload()
 	ReceiveReloadFinished();
 }
 
-void AWeaponBase::CancelReload()
+void ANXRangedWeapon::CancelReload()
 {
 	if (!bIsReloading)
 	{
@@ -435,7 +443,7 @@ void AWeaponBase::CancelReload()
 	ReceiveReloadCanceled();
 }
 
-bool AWeaponBase::CanReload() const
+bool ANXRangedWeapon::CanReload() const
 {
 	if (!WeaponData || bIsReloading || CurrentReserveAmmo <= 0)
 	{
@@ -446,7 +454,7 @@ bool AWeaponBase::CanReload() const
 	return CurrentAmmoInMagazine < MagazineSize;
 }
 
-bool AWeaponBase::GetLogicalAimView(FVector& OutViewLocation, FVector& OutAimDirection) const
+bool ANXRangedWeapon::GetLogicalAimView(FVector& OutViewLocation, FVector& OutAimDirection) const
 {
 	AController* Controller = GetInstigatorController();
 
@@ -497,7 +505,7 @@ bool AWeaponBase::GetLogicalAimView(FVector& OutViewLocation, FVector& OutAimDir
 	return !OutViewLocation.ContainsNaN() && OutAimDirection.Normalize();
 }
 
-void AWeaponBase::ApplyGameplayAimRecoil(FVector& InOutAimDirection) const
+void ANXRangedWeapon::ApplyGameplayAimRecoil(FVector& InOutAimDirection) const
 {
 	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
 	const UPlayerRecoilComponent* RecoilComponent = OwnerPawn
@@ -518,7 +526,7 @@ void AWeaponBase::ApplyGameplayAimRecoil(FVector& InOutAimDirection) const
 	InOutAimDirection = LogicalAimRotation.Vector();
 }
 
-bool AWeaponBase::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirection) const
+bool ANXRangedWeapon::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirection) const
 {
 	// 模式一 : 摄像机中心射线
 	if (!WeaponData || WeaponData->TraceMode == EWeaponTraceMode::CameraView)
@@ -562,7 +570,7 @@ bool AWeaponBase::BuildFireTrace(FVector& OutTraceStart, FVector& OutTraceDirect
 	return !OutTraceDirection.IsNearlyZero();
 }
 
-bool AWeaponBase::GetCameraAimPoint(FVector& OutAimPoint) const
+bool ANXRangedWeapon::GetCameraAimPoint(FVector& OutAimPoint) const
 {
 	FVector CameraStart = FVector::ZeroVector;
 	FVector CameraDirection = FVector::ForwardVector;
@@ -596,7 +604,7 @@ bool AWeaponBase::GetCameraAimPoint(FVector& OutAimPoint) const
 	return true;
 }
 
-bool AWeaponBase::GetMuzzleTransform(FTransform& OutMuzzleTransform) const
+bool ANXRangedWeapon::GetMuzzleTransform(FTransform& OutMuzzleTransform) const
 {
 	if (!WeaponMesh)
 	{
@@ -615,7 +623,7 @@ bool AWeaponBase::GetMuzzleTransform(FTransform& OutMuzzleTransform) const
 	return true;
 }
 
-FVector AWeaponBase::ApplySpreadToDirection(const FVector& TraceDirection) const
+FVector ANXRangedWeapon::ApplySpreadToDirection(const FVector& TraceDirection) const
 {
 	const FVector NormalizedDirection = TraceDirection.GetSafeNormal();
 	const float CurrentSpreadAngle = GetCurrentSpreadAngle();
@@ -629,18 +637,18 @@ FVector AWeaponBase::ApplySpreadToDirection(const FVector& TraceDirection) const
 	return FMath::VRandCone(NormalizedDirection, SpreadRadians);
 }
 
-FWeaponAccuracyState AWeaponBase::GetAccuracyState() const
+FWeaponAccuracyState ANXRangedWeapon::GetAccuracyState() const
 {
 	return BuildAccuracyState(ResolveAccuracyContext());
 }
 
-float AWeaponBase::GetCurrentSpreadAngle() const
+float ANXRangedWeapon::GetCurrentSpreadAngle() const
 {
 	// 射线与 HUD 共用同一 AccuracyState 计算，禁止在这里维护第二套散布公式。
 	return GetAccuracyState().FinalSpreadDegrees;
 }
 
-FVector AWeaponBase::GetMuzzleLocation() const
+FVector ANXRangedWeapon::GetMuzzleLocation() const
 {
 	FTransform MuzzleTransform;
 	if (GetMuzzleTransform(MuzzleTransform))
@@ -651,7 +659,7 @@ FVector AWeaponBase::GetMuzzleLocation() const
 	return GetActorLocation();
 }
 
-AActor* AWeaponBase::GetDamageCauser() const
+AActor* ANXRangedWeapon::GetDamageCauser() const
 {
 	// 伤害来源优先归到持有者，方便后续统计击杀、资源奖励或仇恨来源。
 	if (AActor* OwnerActor = GetOwner())
@@ -664,10 +672,10 @@ AActor* AWeaponBase::GetDamageCauser() const
 		return InstigatorPawn;
 	}
 
-	return const_cast<AWeaponBase*>(this);
+	return const_cast<ANXRangedWeapon*>(this);
 }
 
-void AWeaponBase::HandleAutoFire()
+void ANXRangedWeapon::HandleAutoFire()
 {
 	// 一次性 Timer 到期后只尝试一发；下一发从本次实际成功时间重新调度，不追赶卡顿期间错过的子弹。
 	if (!bWantsToFire || !WeaponData || !WeaponData->IsAutomatic()
@@ -681,7 +689,7 @@ void AWeaponBase::HandleAutoFire()
 	ScheduleNextAutoFire();
 }
 
-void AWeaponBase::ScheduleNextAutoFire()
+void ANXRangedWeapon::ScheduleNextAutoFire()
 {
 	UWorld* World = GetWorld();
 	if (!World || !bWantsToFire || !WeaponData || !WeaponData->IsAutomatic()
@@ -703,12 +711,12 @@ void AWeaponBase::ScheduleNextAutoFire()
 	World->GetTimerManager().SetTimer(
 		AutoFireTimerHandle,
 		this,
-		&AWeaponBase::HandleAutoFire,
+		&ANXRangedWeapon::HandleAutoFire,
 		NextFireDelay,
 		false);
 }
 
-void AWeaponBase::ClearAutoFireTimer()
+void ANXRangedWeapon::ClearAutoFireTimer()
 {
 	if (UWorld* World = GetWorld())
 	{
@@ -716,7 +724,7 @@ void AWeaponBase::ClearAutoFireTimer()
 	}
 }
 
-void AWeaponBase::ResetSpreadState(bool bBroadcastState)
+void ANXRangedWeapon::ResetSpreadState(bool bBroadcastState)
 {
 	StopSpreadRecoveryTimer();
 	CurrentSpreadBloom = 0.0f;
@@ -730,7 +738,7 @@ void AWeaponBase::ResetSpreadState(bool bBroadcastState)
 	}
 }
 
-void AWeaponBase::UpdateSpreadRecovery()
+void ANXRangedWeapon::UpdateSpreadRecovery()
 {
 	UWorld* World = GetWorld();
 	if (!World || !WeaponData)
@@ -792,7 +800,7 @@ void AWeaponBase::UpdateSpreadRecovery()
 	}
 }
 
-void AWeaponBase::AddSpreadForSuccessfulShot()
+void ANXRangedWeapon::AddSpreadForSuccessfulShot()
 {
 	if (!WeaponData)
 	{
@@ -821,7 +829,7 @@ void AWeaponBase::AddSpreadForSuccessfulShot()
 	}
 }
 
-void AWeaponBase::StartSpreadRecoveryTimer()
+void ANXRangedWeapon::StartSpreadRecoveryTimer()
 {
 	UWorld* World = GetWorld();
 	if (!World || World->GetTimerManager().IsTimerActive(SpreadRecoveryTimerHandle))
@@ -832,13 +840,13 @@ void AWeaponBase::StartSpreadRecoveryTimer()
 	World->GetTimerManager().SetTimer(
 		SpreadRecoveryTimerHandle,
 		this,
-		&AWeaponBase::UpdateSpreadRecovery,
+		&ANXRangedWeapon::UpdateSpreadRecovery,
 		SpreadRecoveryTickInterval,
 		true,
 		SpreadRecoveryTickInterval);
 }
 
-void AWeaponBase::StopSpreadRecoveryTimer()
+void ANXRangedWeapon::StopSpreadRecoveryTimer()
 {
 	if (UWorld* World = GetWorld())
 	{
@@ -846,7 +854,7 @@ void AWeaponBase::StopSpreadRecoveryTimer()
 	}
 }
 
-FNXWeaponAccuracyContext AWeaponBase::ResolveAccuracyContext() const
+FNXWeaponAccuracyContext ANXRangedWeapon::ResolveAccuracyContext() const
 {
 	FNXWeaponAccuracyContext Context;
 
@@ -867,7 +875,7 @@ FNXWeaponAccuracyContext AWeaponBase::ResolveAccuracyContext() const
 	return Context;
 }
 
-bool AWeaponBase::HasDynamicAccuracyContextModifiers() const
+bool ANXRangedWeapon::HasDynamicAccuracyContextModifiers() const
 {
 	if (!WeaponData)
 	{
@@ -883,7 +891,7 @@ bool AWeaponBase::HasDynamicAccuracyContextModifiers() const
 		|| SanitizeNonNegative(WeaponData->AirborneSpreadAngle) > KINDA_SMALL_NUMBER;
 }
 
-void AWeaponBase::RefreshAccuracyContextState()
+void ANXRangedWeapon::RefreshAccuracyContextState()
 {
 	if (!HasDynamicAccuracyContextModifiers())
 	{
@@ -895,7 +903,7 @@ void AWeaponBase::RefreshAccuracyContextState()
 	BroadcastAccuracyStateChanged();
 }
 
-void AWeaponBase::UpdateAccuracyContextRefreshTimer()
+void ANXRangedWeapon::UpdateAccuracyContextRefreshTimer()
 {
 	if (HasDynamicAccuracyContextModifiers())
 	{
@@ -907,7 +915,7 @@ void AWeaponBase::UpdateAccuracyContextRefreshTimer()
 	}
 }
 
-void AWeaponBase::StartAccuracyContextRefreshTimer()
+void ANXRangedWeapon::StartAccuracyContextRefreshTimer()
 {
 	UWorld* World = GetWorld();
 	if (!World || World->GetTimerManager().IsTimerActive(AccuracyContextRefreshTimerHandle))
@@ -918,13 +926,13 @@ void AWeaponBase::StartAccuracyContextRefreshTimer()
 	World->GetTimerManager().SetTimer(
 		AccuracyContextRefreshTimerHandle,
 		this,
-		&AWeaponBase::RefreshAccuracyContextState,
+		&ANXRangedWeapon::RefreshAccuracyContextState,
 		AccuracyContextRefreshInterval,
 		true,
 		AccuracyContextRefreshInterval);
 }
 
-void AWeaponBase::StopAccuracyContextRefreshTimer()
+void ANXRangedWeapon::StopAccuracyContextRefreshTimer()
 {
 	if (UWorld* World = GetWorld())
 	{
@@ -932,7 +940,7 @@ void AWeaponBase::StopAccuracyContextRefreshTimer()
 	}
 }
 
-FWeaponAccuracyState AWeaponBase::BuildAccuracyState(const FNXWeaponAccuracyContext& Context) const
+FWeaponAccuracyState ANXRangedWeapon::BuildAccuracyState(const FNXWeaponAccuracyContext& Context) const
 {
 	FWeaponAccuracyState State;
 	if (!WeaponData)
@@ -983,7 +991,7 @@ FWeaponAccuracyState AWeaponBase::BuildAccuracyState(const FNXWeaponAccuracyCont
 	return State;
 }
 
-void AWeaponBase::BroadcastAccuracyStateChanged(bool bForce)
+void ANXRangedWeapon::BroadcastAccuracyStateChanged(bool bForce)
 {
 	const FWeaponAccuracyState NewState = GetAccuracyState();
 	if (!bForce && bHasAccuracyState && NewState == LastAccuracyState)
@@ -996,12 +1004,12 @@ void AWeaponBase::BroadcastAccuracyStateChanged(bool bForce)
 	OnAccuracyStateChanged.Broadcast(this, NewState);
 }
 
-void AWeaponBase::BroadcastAmmoChanged()
+void ANXRangedWeapon::BroadcastAmmoChanged()
 {
 	OnAmmoChanged.Broadcast(this, CurrentAmmoInMagazine, CurrentReserveAmmo, bIsReloading);
 }
 
-void AWeaponBase::HandleDryFire()
+void ANXRangedWeapon::HandleDryFire()
 {
 	if (WeaponData && WeaponData->DryFireSound)
 	{
@@ -1012,7 +1020,7 @@ void AWeaponBase::HandleDryFire()
 	ReceiveDryFire();
 }
 
-FWeaponShotEvent AWeaponBase::BuildSingleTraceShotEvent(
+FWeaponShotEvent ANXRangedWeapon::BuildSingleTraceShotEvent(
 	const FVector& TraceStart,
 	const FVector& TraceEnd,
 	const FVector& ShotDirection,
@@ -1041,7 +1049,7 @@ FWeaponShotEvent AWeaponBase::BuildSingleTraceShotEvent(
 
 	return ShotEvent;
 }
-void AWeaponBase::DrawTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, const FHitResult& HitResult, bool bHit) const
+void ANXRangedWeapon::DrawTraceDebug(const FVector& TraceStart, const FVector& TraceEnd, const FHitResult& HitResult, bool bHit) const
 {
 	if (!WeaponData || !WeaponData->bDrawDebugTrace)
 	{

@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "WeaponAccuracyTypes.generated.h"
 
-class AWeaponBase;
+class ANXRangedWeapon;
 
 /**
  * 武器精度计算所需的角色只读上下文。
@@ -105,5 +105,5 @@ struct GASPALS_API FWeaponAccuracyState
 // UI 和调试只订阅状态快照，不轮询或持有 WeaponBase 的内部 Bloom。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnWeaponAccuracyChangedSignature,
-	AWeaponBase*, Weapon,
+	ANXRangedWeapon*, Weapon,
 	const FWeaponAccuracyState&, AccuracyState);

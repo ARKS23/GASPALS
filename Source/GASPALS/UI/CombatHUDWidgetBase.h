@@ -8,7 +8,7 @@
 #include "CombatHUDWidgetBase.generated.h"
 
 class APawn;
-class AWeaponBase;
+class ANXRangedWeapon;
 class UCombatComponent;
 class UHealthComponent;
 class UWeaponComponent;
@@ -80,7 +80,7 @@ private:
 	TObjectPtr<UHealthComponent> HealthComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<AWeaponBase> BoundWeapon;
+	TObjectPtr<ANXRangedWeapon> BoundWeapon;
 
 	FWeaponHUDState LastWeaponState;
 	FPlayerHUDState LastPlayerState;
@@ -91,7 +91,7 @@ private:
 
 	void BindObservedPawn();
 	void UnbindObservedPawn();
-	void BindWeapon(AWeaponBase* NewWeapon);
+	void BindWeapon(ANXRangedWeapon* NewWeapon);
 	void PushWeaponHUDState(bool bForce = false);
 	void PushPlayerHUDState(bool bForce = false);
 	void PushCrosshairHUDState(bool bForce = false);
@@ -99,19 +99,19 @@ private:
 	UFUNCTION()
 	void HandleCurrentWeaponChanged(
 		UWeaponComponent* InWeaponComponent,
-		AWeaponBase* OldWeapon,
-		AWeaponBase* NewWeapon);
+		ANXRangedWeapon* OldWeapon,
+		ANXRangedWeapon* NewWeapon);
 
 	UFUNCTION()
 	void HandleWeaponAmmoChanged(
-		AWeaponBase* Weapon,
+		ANXRangedWeapon* Weapon,
 		int32 AmmoInMagazine,
 		int32 ReserveAmmo,
 		bool bIsReloading);
 
 	UFUNCTION()
 	void HandleWeaponAccuracyChanged(
-		AWeaponBase* Weapon,
+		ANXRangedWeapon* Weapon,
 		const FWeaponAccuracyState& AccuracyState);
 
 	UFUNCTION()

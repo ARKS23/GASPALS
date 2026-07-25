@@ -18,7 +18,7 @@
 已经具备：
 
 - `ANXCharacterBase` 角色基类和统一 Montage 执行入口。
-- `CombatComponent -> WeaponComponent -> WeaponBase` 枪械请求链。
+- `CombatComponent -> WeaponComponent -> NXRangedWeapon` 枪械请求链。
 - `WeaponPresentationComponent` 的动画、音效、VFX、Tracer、Impact 和后坐表现。
 - `WeaponAnimationProfile + Chooser` 数据驱动动画选择。
 - GASPALS Rifle/Pistol Overlay、手部 IK 与 `NXWeaponAction` Slot。
@@ -27,7 +27,7 @@
 
 当前限制：
 
-- `AWeaponBase`、`UWeaponDataAsset` 和 `UWeaponComponent` 仍以枪械语义为主。
+- `ANXRangedWeapon`、`UWeaponDataAsset` 和 `UWeaponComponent` 仍以枪械语义为主。
 - 动画 Cue 固定为 Fire/Reload/Equip/Unequip，不适合持续增加近战动作。
 - 尚未启用 `GameplayAbilities`，没有 ASC、Ability、AttributeSet 或 GameplayEffect。
 - 生命值当前由 `HealthComponent` 维护，不能同时再建立第二套 GAS Health 权威数据。
@@ -43,7 +43,7 @@
 5. **语义使用 Gameplay Tags**：不持续扩展 LightAttack1、Parry 等固定枚举。
 6. **Ability 不硬编码动画**：Ability 提供动作语义，Profile/Chooser 解析具体资源。
 7. **玩法与表现分离**：Ability/武器决定结果，表现层消费不可变 Cue，不反向决定 Gameplay。
-8. **组件数量受控**：角色侧保持装备、战斗动作、表现三个主要边界；武器差异放在 Actor 和数据中。
+8. **组件数量受控**：动作生命周期由 ASC 管理，角色侧不再新增通用战斗组件；装备与表现保持独立边界，武器差异放在 Actor 和数据中。
 9. **渐进式 GAS**：先接近战动作和体力，再迁移伤害、枪械和联机表现。
 
 ## 4. 目标结构
@@ -54,15 +54,16 @@ ANXPlayerState
 ├── Startup Ability Specs
 └── AttributeSets                // 后续阶段接入
 
-ANXCharacterBase                 // 玩家 ASC 的 AvatarActor
-├── CombatComponent              // 现有组件演化为输入/GAS 动作门面
+ANXCharacterBase                 // 玩家 ASC 的 AvatarActor 与 ActionTag 请求入口
 ├── EquipmentComponent           // 由现有 WeaponComponent 渐进演化
 ├── CombatPresentationComponent  // 由现有 WeaponPresentationComponent 渐进演化
 ├── PlayerRecoilComponent        // 枪械专用
 └── HealthComponent              // GAS Health 迁移前保留
 
+CombatComponent                  // 过渡期枪械适配，调用方迁移完成后评估移除
+
 ANXEquipmentBase
-├── ANXRangedWeapon              // 承接当前 AWeaponBase 枪械逻辑
+├── ANXRangedWeapon              // 由原 AWeaponBase 重命名，承接当前枪械逻辑
 └── ANXMeleeWeapon               // 攻击窗口、Sweep 和近战运行时状态
 ```
 
@@ -134,11 +135,11 @@ GAS 负责：
 |---|---|---|---|
 | 0 | 冻结并记录枪械基线 | 射击、换弹、HUD、Overlay 可回归 | 已具备 |
 | 1 | [GAS 基础设施](./phase_01_gas_foundation.md) | ASC 初始化、Tag 激活、Ability 授予与取消正常 | 待开发 |
-| 2 | 通用动作与装备契约 | 同一入口可识别近战/枪械装备，不复制两套装备状态 | 待开发 |
+| 2 | [通用动作与装备契约](../05_tasks/GAS/phase_02_combat_action_equipment_contract.md) | 同一入口可识别近战/枪械装备，不复制两套装备状态 | 待开发 |
 | 3 | 单手剑最小闭环 | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 待开发 |
 | 4 | 魂类基础状态 | 体力、重攻击、闪避、格挡、招架、硬直 | 待开发 |
 | 5 | 连击与动画数据驱动 | 输入缓存、取消窗口、Combo 分支、Chooser/Profile 换资源 | 待开发 |
-| 6 | 枪械 GAS 适配 | Fire/Reload Ability 包装现有 WeaponBase，枪械行为不回归 | 待开发 |
+| 6 | 枪械 GAS 适配 | Fire/Reload Ability 包装现有 ANXRangedWeapon，枪械行为不回归 | 待开发 |
 | 7 | Attribute/Effect 迁移 | Health、Damage、Poise 统一进入 AttributeSet/GameplayEffect | 待开发 |
 | 8 | 联机与 GameplayCue | 权威、预测、复制和远端表现验证 | 延后 |
 
@@ -155,11 +156,11 @@ GAS 负责：
 
 ### 阶段 2：通用动作与装备契约
 
-- 定义 `FNXCombatActionRequest/Cue`，核心标识使用 `FGameplayTag`；只有出现真实调用需求时再增加 Result 类型。
-- `CombatComponent` 逐步成为输入门面，调用 ASC 激活动作。
-- 抽取通用装备基类与装备数据；枪械和近战使用各自子类。
-- 保留当前 `UWeaponComponent` API 作为迁移适配，不进行一次性重命名。
-- 动画解析开始支持 `ActionTag + CharacterFamily + EquipmentFamily + ViewMode`。
+- 建立 `Combat.Action/State/Event`、`Equipment.Category` 和 Animation Tag 的归属规则。
+- 由 `ANXCharacterBase` 提供 ActionTag 请求入口；上下文优先使用 GAS 原生 `FGameplayEventData`，不提前创建通用 Request/Cue 空结构。
+- 新增通用 Equipment Actor/Component 基类，让 `ANXRangedWeapon/UWeaponComponent` 继承；角色上不增加第二个组件实例。
+- 保留 `UWeaponComponent` 枪械 API 作为迁移适配，并确保只有一份 Current Equipment 状态。
+- `CombatComponent` 冻结新功能并保留现有枪械链；通用动画解析随阶段 3 的真实轻攻击需求接入。
 
 ### 阶段 3：单手剑最小闭环
 
@@ -181,7 +182,7 @@ GAS 负责：
 
 ### 阶段 6-8：枪械迁移与联机
 
-- `GA_WeaponFire/Reload` 先调用现有 `WeaponBase`，不复制射击公式。
+- `GA_WeaponFire/Reload` 先调用现有 `ANXRangedWeapon`，不复制射击公式。
 - 每种运行时数据只保留一个权威来源；迁移完成后再删除旧入口。
 - GameplayCue 优先用于需要复制的枪口、Impact 和受击表现；本地相机后坐继续由本地玩家组件执行。
 - 联机阶段验证 PlayerState ASC 的复制、预测、Pawn 重生重绑和临时效果清理策略。

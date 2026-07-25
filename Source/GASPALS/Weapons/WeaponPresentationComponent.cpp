@@ -11,7 +11,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
-#include "WeaponBase.h"
+#include "NXRangedWeapon.h"
 #include "WeaponAnimationProfile.h"
 #include "WeaponComponent.h"
 #include "WeaponDataAsset.h"
@@ -109,7 +109,7 @@ void UWeaponPresentationComponent::ClearVisualSource()
 
 void UWeaponPresentationComponent::RefreshCurrentWeaponBinding()
 {
-	AWeaponBase* ResolvedWeapon = IsValid(WeaponComponent.Get()) ? WeaponComponent->GetCurrentWeapon() : nullptr;
+	ANXRangedWeapon* ResolvedWeapon = IsValid(WeaponComponent.Get()) ? WeaponComponent->GetCurrentWeapon() : nullptr;
 	SetCurrentWeapon(ResolvedWeapon);
 }
 
@@ -174,8 +174,8 @@ void UWeaponPresentationComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 
 void UWeaponPresentationComponent::HandleCurrentWeaponChanged(
 	UWeaponComponent* InWeaponComponent,
-	AWeaponBase* OldWeapon,
-	AWeaponBase* NewWeapon)
+	ANXRangedWeapon* OldWeapon,
+	ANXRangedWeapon* NewWeapon)
 {
 	if (InWeaponComponent != WeaponComponent.Get())
 	{
@@ -185,7 +185,7 @@ void UWeaponPresentationComponent::HandleCurrentWeaponChanged(
 	SetCurrentWeapon(NewWeapon);
 }
 
-void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const FWeaponShotEvent& ShotEvent)
+void UWeaponPresentationComponent::HandleWeaponShot(ANXRangedWeapon* Weapon, const FWeaponShotEvent& ShotEvent)
 {
 	if (!IsValid(Weapon) || Weapon != CurrentWeapon.Get())
 	{
@@ -211,7 +211,7 @@ void UWeaponPresentationComponent::HandleWeaponShot(AWeaponBase* Weapon, const F
 	BroadcastHitConfirmation(ShotEvent);
 }
 
-void UWeaponPresentationComponent::HandleReloadStarted(AWeaponBase* Weapon)
+void UWeaponPresentationComponent::HandleReloadStarted(ANXRangedWeapon* Weapon)
 {
 	if (!IsValid(Weapon) || Weapon != CurrentWeapon.Get())
 	{
@@ -240,7 +240,7 @@ void UWeaponPresentationComponent::HandleReloadStarted(AWeaponBase* Weapon)
 	BroadcastAnimationCue(ActiveReloadAnimationCue);
 }
 
-void UWeaponPresentationComponent::HandleReloadFinished(AWeaponBase* Weapon)
+void UWeaponPresentationComponent::HandleReloadFinished(ANXRangedWeapon* Weapon)
 {
 	if (IsValid(Weapon) && Weapon == CurrentWeapon.Get())
 	{
@@ -248,7 +248,7 @@ void UWeaponPresentationComponent::HandleReloadFinished(AWeaponBase* Weapon)
 	}
 }
 
-void UWeaponPresentationComponent::HandleReloadCanceled(AWeaponBase* Weapon)
+void UWeaponPresentationComponent::HandleReloadCanceled(ANXRangedWeapon* Weapon)
 {
 	if (IsValid(Weapon) && Weapon == CurrentWeapon.Get())
 	{
@@ -256,7 +256,7 @@ void UWeaponPresentationComponent::HandleReloadCanceled(AWeaponBase* Weapon)
 	}
 }
 
-void UWeaponPresentationComponent::HandleWeaponDataChanged(AWeaponBase* Weapon)
+void UWeaponPresentationComponent::HandleWeaponDataChanged(ANXRangedWeapon* Weapon)
 {
 	if (IsValid(Weapon) && Weapon == CurrentWeapon.Get())
 	{
@@ -678,7 +678,7 @@ FVector UWeaponPresentationComponent::ResolveCurrentWeaponAudioLocation() const
 
 FWeaponAnimationCue UWeaponPresentationComponent::BuildAnimationCue(
 	EWeaponAnimationCueType CueType,
-	AWeaponBase* SourceWeapon,
+	ANXRangedWeapon* SourceWeapon,
 	int32 ActionId) const
 {
 	FWeaponAnimationCue AnimationCue;
@@ -836,7 +836,7 @@ void UWeaponPresentationComponent::BroadcastAnimationCue(
 
 void UWeaponPresentationComponent::BroadcastAnimationRequest(
 	EWeaponAnimationCueType CueType,
-	AWeaponBase* SourceWeapon,
+	ANXRangedWeapon* SourceWeapon,
 	int32 ActionId)
 {
 	if (!IsValid(SourceWeapon) || ActionId <= 0)
@@ -853,7 +853,7 @@ void UWeaponPresentationComponent::BroadcastAnimationRequest(
 
 void UWeaponPresentationComponent::BroadcastReloadStopAnimation(
 	EWeaponAnimationCueType CueType,
-	AWeaponBase* SourceWeapon)
+	ANXRangedWeapon* SourceWeapon)
 {
 	if (CueType != EWeaponAnimationCueType::ReloadFinished
 		&& CueType != EWeaponAnimationCueType::ReloadCanceled)
@@ -885,7 +885,7 @@ void UWeaponPresentationComponent::BroadcastReloadStopAnimation(
 
 void UWeaponPresentationComponent::TryBroadcastEquippedAnimation()
 {
-	AWeaponBase* Weapon = CurrentWeapon.Get();
+	ANXRangedWeapon* Weapon = CurrentWeapon.Get();
 	if (PresentationState != EWeaponPresentationState::Ready
 		|| !bAnimationProfileReady
 		|| !IsValid(Weapon)
@@ -944,13 +944,10 @@ FWeaponAnimationSelectionContext UWeaponPresentationComponent::BuildAnimationSel
 
 	if (IsValid(CurrentWeapon.Get()))
 	{
-		if (const UWeaponDataAsset* WeaponData = CurrentWeapon->GetWeaponData())
+		const FGameplayTag EquipmentAnimationFamily = CurrentWeapon->GetEquipmentAnimationFamily();
+		if (EquipmentAnimationFamily.IsValid())
 		{
-			if (WeaponData->WeaponAnimationFamily.IsValid())
-			{
-				SelectionContext.WeaponAnimationFamily.AddTag(
-					WeaponData->WeaponAnimationFamily);
-			}
+			SelectionContext.WeaponAnimationFamily.AddTag(EquipmentAnimationFamily);
 		}
 	}
 
@@ -1098,7 +1095,7 @@ void UWeaponPresentationComponent::UnbindAnimationContextCharacter()
 	AnimationContextCharacter.Reset();
 }
 
-void UWeaponPresentationComponent::BindWeaponEvents(AWeaponBase* Weapon)
+void UWeaponPresentationComponent::BindWeaponEvents(ANXRangedWeapon* Weapon)
 {
 	if (!IsValid(Weapon))
 	{
@@ -1112,7 +1109,7 @@ void UWeaponPresentationComponent::BindWeaponEvents(AWeaponBase* Weapon)
 	Weapon->OnWeaponDataChanged.AddUniqueDynamic(this, &UWeaponPresentationComponent::HandleWeaponDataChanged);
 }
 
-void UWeaponPresentationComponent::UnbindWeaponEvents(AWeaponBase* Weapon)
+void UWeaponPresentationComponent::UnbindWeaponEvents(ANXRangedWeapon* Weapon)
 {
 	if (!IsValid(Weapon))
 	{
@@ -1135,7 +1132,7 @@ void UWeaponPresentationComponent::HandleNiagaraSystemFinished(UNiagaraComponent
 		});
 }
 
-void UWeaponPresentationComponent::SetCurrentWeapon(AWeaponBase* NewWeapon)
+void UWeaponPresentationComponent::SetCurrentWeapon(ANXRangedWeapon* NewWeapon)
 {
 	if (CurrentWeapon == NewWeapon)
 	{
@@ -1145,7 +1142,7 @@ void UWeaponPresentationComponent::SetCurrentWeapon(AWeaponBase* NewWeapon)
 		return;
 	}
 
-	AWeaponBase* PreviousWeapon = CurrentWeapon.Get();
+	ANXRangedWeapon* PreviousWeapon = CurrentWeapon.Get();
 	if (IsValid(PreviousWeapon))
 	{
 		// 正常卸装会先收到 Gameplay Canceled；该 fallback 负责初始化切换和 EndPlay 收口。

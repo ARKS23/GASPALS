@@ -3,7 +3,7 @@
 #include "../Combat/CombatComponent.h"
 #include "GameFramework/Pawn.h"
 #include "../Health/HealthComponent.h"
-#include "../Weapons/WeaponBase.h"
+#include "../Weapons/NXRangedWeapon.h"
 #include "../Weapons/WeaponComponent.h"
 #include "../Weapons/WeaponDataAsset.h"
 #include "../Weapons/WeaponPresentationComponent.h"
@@ -75,7 +75,7 @@ FPlayerHUDState UCombatHUDWidgetBase::GetPlayerHUDState() const
 FCrosshairHUDState UCombatHUDWidgetBase::GetCrosshairHUDState() const
 {
 	FCrosshairHUDState State;
-	AWeaponBase* Weapon = BoundWeapon.Get();
+	ANXRangedWeapon* Weapon = BoundWeapon.Get();
 	State.bHasWeapon = IsValid(Weapon);
 
 	if (State.bHasWeapon)
@@ -192,7 +192,7 @@ void UCombatHUDWidgetBase::UnbindObservedPawn()
 	bHasCrosshairState = false;
 }
 
-void UCombatHUDWidgetBase::BindWeapon(AWeaponBase* NewWeapon)
+void UCombatHUDWidgetBase::BindWeapon(ANXRangedWeapon* NewWeapon)
 {
 	if (BoundWeapon == NewWeapon)
 	{
@@ -259,8 +259,8 @@ void UCombatHUDWidgetBase::PushCrosshairHUDState(bool bForce)
 
 void UCombatHUDWidgetBase::HandleCurrentWeaponChanged(
 	UWeaponComponent* InWeaponComponent,
-	AWeaponBase* OldWeapon,
-	AWeaponBase* NewWeapon)
+	ANXRangedWeapon* OldWeapon,
+	ANXRangedWeapon* NewWeapon)
 {
 	if (InWeaponComponent != WeaponComponent.Get())
 	{
@@ -274,7 +274,7 @@ void UCombatHUDWidgetBase::HandleCurrentWeaponChanged(
 }
 
 void UCombatHUDWidgetBase::HandleWeaponAmmoChanged(
-	AWeaponBase* Weapon,
+	ANXRangedWeapon* Weapon,
 	int32 AmmoInMagazine,
 	int32 ReserveAmmo,
 	bool bIsReloading)
@@ -288,7 +288,7 @@ void UCombatHUDWidgetBase::HandleWeaponAmmoChanged(
 }
 
 void UCombatHUDWidgetBase::HandleWeaponAccuracyChanged(
-	AWeaponBase* Weapon,
+	ANXRangedWeapon* Weapon,
 	const FWeaponAccuracyState& /*AccuracyState*/)
 {
 	if (Weapon != BoundWeapon.Get())

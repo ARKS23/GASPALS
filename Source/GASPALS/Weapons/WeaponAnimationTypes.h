@@ -5,7 +5,7 @@
 #include "UObject/SoftObjectPtr.h"
 #include "WeaponAnimationTypes.generated.h"
 
-class AWeaponBase;
+class ANXRangedWeapon;
 class UAnimMontage;
 
 // 表现层只消费动作语义，不反向决定开火、换弹或装备是否成功。
@@ -122,7 +122,7 @@ struct GASPALS_API FWeaponAnimationCue
 	EWeaponAnimationCueType CueType = EWeaponAnimationCueType::Fire;
 
 	UPROPERTY(BlueprintReadOnly, Category="Weapon|Animation")
-	TObjectPtr<AWeaponBase> SourceWeapon = nullptr;
+	TObjectPtr<ANXRangedWeapon> SourceWeapon = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category="Weapon|Animation")
 	TObjectPtr<UAnimMontage> Montage = nullptr;

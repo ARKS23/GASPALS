@@ -6,7 +6,7 @@
 #include "PlayerRecoilComponent.generated.h"
 
 class APlayerCameraManager;
-class AWeaponBase;
+class ANXRangedWeapon;
 class UCameraShakeBase;
 class UWeaponComponent;
 class UWeaponPresentationComponent;
@@ -101,8 +101,8 @@ private:
 	UFUNCTION()
 	void HandleCurrentWeaponChanged(
 		UWeaponComponent* InWeaponComponent,
-		AWeaponBase* OldWeapon,
-		AWeaponBase* NewWeapon);
+		ANXRangedWeapon* OldWeapon,
+		ANXRangedWeapon* NewWeapon);
 
 	bool IsOwnerLocallyControlled() const;
 	APlayerCameraManager* ResolveLocalCameraManager() const;

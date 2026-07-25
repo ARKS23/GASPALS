@@ -6,7 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
-#include "WeaponBase.h"
+#include "NXRangedWeapon.h"
 #include "WeaponDataAsset.h"
 
 UWeaponComponent::UWeaponComponent()
@@ -37,14 +37,14 @@ void UWeaponComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-AWeaponBase* UWeaponComponent::EquipWeapon(TSubclassOf<AWeaponBase> WeaponClass)
+ANXRangedWeapon* UWeaponComponent::EquipWeapon(TSubclassOf<ANXRangedWeapon> WeaponClass)
 {
 	if (!WeaponClass)
 	{
 		return nullptr;
 	}
 
-	AWeaponBase* NewWeapon = SpawnWeapon(WeaponClass);
+	ANXRangedWeapon* NewWeapon = SpawnWeapon(WeaponClass);
 	if (!NewWeapon)
 	{
 		return nullptr;
@@ -54,6 +54,12 @@ AWeaponBase* UWeaponComponent::EquipWeapon(TSubclassOf<AWeaponBase> WeaponClass)
 	{
 		// 第一版只允许一把当前武器，装备新武器前先卸下旧武器。
 		UnequipCurrentWeapon(bDestroyCurrentWeaponOnUnequip);
+	}
+
+	if (!NewWeapon->NotifyEquipped(GetOwner()))
+	{
+		NewWeapon->Destroy();
+		return nullptr;
 	}
 
 	CurrentWeapon = NewWeapon;
@@ -67,14 +73,14 @@ AWeaponBase* UWeaponComponent::EquipWeapon(TSubclassOf<AWeaponBase> WeaponClass)
 	return NewWeapon;
 }
 
-AWeaponBase* UWeaponComponent::EquipDefaultWeapon()
+ANXRangedWeapon* UWeaponComponent::EquipDefaultWeapon()
 {
 	return DefaultWeaponClass ? EquipWeapon(DefaultWeaponClass) : nullptr;
 }
 
 void UWeaponComponent::UnequipCurrentWeapon(bool bDestroyWeapon)
 {
-	AWeaponBase* OldWeapon = GetCurrentWeapon();
+	ANXRangedWeapon* OldWeapon = GetCurrentWeapon();
 	if (!OldWeapon)
 	{
 		return;
@@ -83,6 +89,7 @@ void UWeaponComponent::UnequipCurrentWeapon(bool bDestroyWeapon)
 	// 卸下前停止武器运行状态，防止全自动 Timer 或换弹 Timer 继续回调。
 	OldWeapon->StopFire();
 	OldWeapon->CancelReload();
+	OldWeapon->NotifyUnequipped();
 
 	CurrentWeapon = nullptr;
 	BroadcastCurrentWeaponChanged(OldWeapon, nullptr);
@@ -116,13 +123,13 @@ bool UWeaponComponent::ReattachCurrentWeapon()
 bool UWeaponComponent::StartFire()
 {
 	// 组件不判断弹药和射速，只把请求交给当前武器。
-	AWeaponBase* Weapon = GetCurrentWeapon();
+	ANXRangedWeapon* Weapon = GetCurrentWeapon();
 	return Weapon ? Weapon->StartFire() : false;
 }
 
 void UWeaponComponent::StopFire()
 {
-	if (AWeaponBase* Weapon = GetCurrentWeapon())
+	if (ANXRangedWeapon* Weapon = GetCurrentWeapon())
 	{
 		Weapon->StopFire();
 	}
@@ -130,13 +137,13 @@ void UWeaponComponent::StopFire()
 
 bool UWeaponComponent::Reload()
 {
-	AWeaponBase* Weapon = GetCurrentWeapon();
+	ANXRangedWeapon* Weapon = GetCurrentWeapon();
 	return Weapon ? Weapon->StartReload() : false;
 }
 
 void UWeaponComponent::CancelReload()
 {
-	if (AWeaponBase* Weapon = GetCurrentWeapon())
+	if (ANXRangedWeapon* Weapon = GetCurrentWeapon())
 	{
 		Weapon->CancelReload();
 	}
@@ -147,7 +154,7 @@ bool UWeaponComponent::HasWeapon() const
 	return IsValid(CurrentWeapon.Get());
 }
 
-AWeaponBase* UWeaponComponent::GetCurrentWeapon() const
+ANXRangedWeapon* UWeaponComponent::GetCurrentWeapon() const
 {
 	return IsValid(CurrentWeapon.Get()) ? CurrentWeapon.Get() : nullptr;
 }
@@ -172,23 +179,23 @@ USkeletalMeshComponent* UWeaponComponent::GetOwnerMesh() const
 
 int32 UWeaponComponent::GetAmmoInMagazine() const
 {
-	const AWeaponBase* Weapon = GetCurrentWeapon();
+	const ANXRangedWeapon* Weapon = GetCurrentWeapon();
 	return Weapon ? Weapon->GetAmmoInMagazine() : 0;
 }
 
 int32 UWeaponComponent::GetReserveAmmo() const
 {
-	const AWeaponBase* Weapon = GetCurrentWeapon();
+	const ANXRangedWeapon* Weapon = GetCurrentWeapon();
 	return Weapon ? Weapon->GetReserveAmmo() : 0;
 }
 
 bool UWeaponComponent::IsReloading() const
 {
-	const AWeaponBase* Weapon = GetCurrentWeapon();
+	const ANXRangedWeapon* Weapon = GetCurrentWeapon();
 	return Weapon ? Weapon->IsReloading() : false;
 }
 
-AWeaponBase* UWeaponComponent::SpawnWeapon(TSubclassOf<AWeaponBase> WeaponClass) const
+ANXRangedWeapon* UWeaponComponent::SpawnWeapon(TSubclassOf<ANXRangedWeapon> WeaponClass) const
 {
 	AActor* OwnerActor = GetOwner();
 	UWorld* World = GetWorld();
@@ -199,16 +206,16 @@ AWeaponBase* UWeaponComponent::SpawnWeapon(TSubclassOf<AWeaponBase> WeaponClass)
 	}
 
 	FActorSpawnParameters SpawnParams;
-	// Owner/Instigator 会被 AWeaponBase 用来获取视角、忽略自身碰撞和记录伤害来源。
+	// Owner/Instigator 会被 ANXRangedWeapon 用来获取视角、忽略自身碰撞和记录伤害来源。
 	SpawnParams.Owner = OwnerActor;
 	SpawnParams.Instigator = Cast<APawn>(OwnerActor);
 	// 武器会立即附着到角色，生成时不应该因为和角色重叠而失败。
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	return World->SpawnActor<AWeaponBase>(WeaponClass, OwnerActor->GetActorTransform(), SpawnParams);
+	return World->SpawnActor<ANXRangedWeapon>(WeaponClass, OwnerActor->GetActorTransform(), SpawnParams);
 }
 
-bool UWeaponComponent::AttachWeaponToOwner(AWeaponBase* Weapon) const
+bool UWeaponComponent::AttachWeaponToOwner(ANXRangedWeapon* Weapon) const
 {
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor || !Weapon)
@@ -242,7 +249,7 @@ bool UWeaponComponent::AttachWeaponToOwner(AWeaponBase* Weapon) const
 	return false;
 }
 
-void UWeaponComponent::ApplyLogicalWeaponPresentation(AWeaponBase* Weapon) const
+void UWeaponComponent::ApplyLogicalWeaponPresentation(ANXRangedWeapon* Weapon) const
 {
 	if (!Weapon)
 	{
@@ -267,7 +274,7 @@ void UWeaponComponent::ApplyLogicalWeaponPresentation(AWeaponBase* Weapon) const
 	AttachWeaponToOwner(Weapon);
 }
 
-FName UWeaponComponent::ResolveAttachSocketName(const AWeaponBase* Weapon) const
+FName UWeaponComponent::ResolveAttachSocketName(const ANXRangedWeapon* Weapon) const
 {
 	if (!WeaponAttachSocketName.IsNone())
 	{
@@ -287,7 +294,7 @@ FName UWeaponComponent::ResolveAttachSocketName(const AWeaponBase* Weapon) const
 	return NAME_None;
 }
 
-void UWeaponComponent::BroadcastCurrentWeaponChanged(AWeaponBase* OldWeapon, AWeaponBase* NewWeapon)
+void UWeaponComponent::BroadcastCurrentWeaponChanged(ANXRangedWeapon* OldWeapon, ANXRangedWeapon* NewWeapon)
 {
 	// 同时通知 C++/蓝图绑定事件和子蓝图实现事件。
 	OnCurrentWeaponChanged.Broadcast(this, OldWeapon, NewWeapon);

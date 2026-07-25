@@ -7,7 +7,7 @@
 #include "WeaponPresentationComponent.generated.h"
 
 class ANXCharacterBase;
-class AWeaponBase;
+class ANXRangedWeapon;
 struct FStreamableHandle;
 class UAnimMontage;
 class UNiagaraComponent;
@@ -79,7 +79,7 @@ public:
 	EWeaponPresentationState GetPresentationState() const { return PresentationState; }
 
 	UFUNCTION(BlueprintPure, Category="Weapon|Presentation")
-	AWeaponBase* GetCurrentWeapon() const { return CurrentWeapon.Get(); }
+	ANXRangedWeapon* GetCurrentWeapon() const { return CurrentWeapon.Get(); }
 
 	// Montage 延迟回调执行清理前必须验证 Cue，避免旧动作停止新武器的动画。
 	UFUNCTION(BlueprintPure, Category="Weapon|Presentation|Animation")
@@ -150,7 +150,7 @@ protected:
 	TObjectPtr<UWeaponComponent> WeaponComponent;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation")
-	TObjectPtr<AWeaponBase> CurrentWeapon;
+	TObjectPtr<ANXRangedWeapon> CurrentWeapon;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Presentation")
 	TObjectPtr<USkeletalMeshComponent> VisualMesh;
@@ -172,17 +172,17 @@ protected:
 
 private:
 	// 记录视觉源对应的武器，消除多个 OnCurrentWeaponChanged 监听者的执行顺序差异。
-	TWeakObjectPtr<AWeaponBase> VisualSourceWeapon;
+	TWeakObjectPtr<ANXRangedWeapon> VisualSourceWeapon;
 
 	// 只保存仍在播放的组件；系统结束时会主动移除，避免对象池组件被误清理。
 	TArray<TWeakObjectPtr<UNiagaraComponent>> ActiveNiagaraComponents;
 
 	// Equipped 只允许在当前武器视觉源首次 Ready 时发送一次。
-	TWeakObjectPtr<AWeaponBase> EquippedCueWeapon;
+	TWeakObjectPtr<ANXRangedWeapon> EquippedCueWeapon;
 	TWeakObjectPtr<ANXCharacterBase> AnimationContextCharacter;
 
 	// ReloadStarted 与 Finished/Canceled 必须共享同一个 ActionId。
-	TWeakObjectPtr<AWeaponBase> ActiveReloadCueWeapon;
+	TWeakObjectPtr<ANXRangedWeapon> ActiveReloadCueWeapon;
 	int32 ActiveReloadActionId = 0;
 
 	// 保存 Started 时真正使用的 Montage，避免异步 Profile 完成后 Stop Cue 指向另一套资源。
@@ -200,23 +200,23 @@ private:
 	UFUNCTION()
 	void HandleCurrentWeaponChanged(
 		UWeaponComponent* InWeaponComponent,
-		AWeaponBase* OldWeapon,
-		AWeaponBase* NewWeapon);
+		ANXRangedWeapon* OldWeapon,
+		ANXRangedWeapon* NewWeapon);
 
 	UFUNCTION()
-	void HandleWeaponShot(AWeaponBase* Weapon, const FWeaponShotEvent& ShotEvent);
+	void HandleWeaponShot(ANXRangedWeapon* Weapon, const FWeaponShotEvent& ShotEvent);
 
 	UFUNCTION()
-	void HandleReloadStarted(AWeaponBase* Weapon);
+	void HandleReloadStarted(ANXRangedWeapon* Weapon);
 
 	UFUNCTION()
-	void HandleReloadFinished(AWeaponBase* Weapon);
+	void HandleReloadFinished(ANXRangedWeapon* Weapon);
 
 	UFUNCTION()
-	void HandleReloadCanceled(AWeaponBase* Weapon);
+	void HandleReloadCanceled(ANXRangedWeapon* Weapon);
 
 	UFUNCTION()
-	void HandleWeaponDataChanged(AWeaponBase* Weapon);
+	void HandleWeaponDataChanged(ANXRangedWeapon* Weapon);
 
 	UFUNCTION()
 	void HandleCharacterAnimationFamilyChanged(
@@ -258,7 +258,7 @@ private:
 	FVector ResolveCurrentWeaponAudioLocation() const;
 	FWeaponAnimationCue BuildAnimationCue(
 		EWeaponAnimationCueType CueType,
-		AWeaponBase* SourceWeapon,
+		ANXRangedWeapon* SourceWeapon,
 		int32 ActionId) const;
 	bool TryApplyAnimationProfile(
 		FWeaponAnimationCue& InOutAnimationCue,
@@ -276,11 +276,11 @@ private:
 	void BroadcastAnimationCue(const FWeaponAnimationCue& AnimationCue);
 	void BroadcastAnimationRequest(
 		EWeaponAnimationCueType CueType,
-		AWeaponBase* SourceWeapon,
+		ANXRangedWeapon* SourceWeapon,
 		int32 ActionId);
 	void BroadcastReloadStopAnimation(
 		EWeaponAnimationCueType CueType,
-		AWeaponBase* SourceWeapon);
+		ANXRangedWeapon* SourceWeapon);
 	void TryBroadcastEquippedAnimation();
 	int32 BeginAnimationAction();
 	void ResetReloadAnimationAction();
@@ -295,9 +295,9 @@ private:
 	void CancelAnimationProfileLoad();
 	void BindAnimationContextCharacter();
 	void UnbindAnimationContextCharacter();
-	void BindWeaponEvents(AWeaponBase* Weapon);
-	void UnbindWeaponEvents(AWeaponBase* Weapon);
-	void SetCurrentWeapon(AWeaponBase* NewWeapon);
+	void BindWeaponEvents(ANXRangedWeapon* Weapon);
+	void UnbindWeaponEvents(ANXRangedWeapon* Weapon);
+	void SetCurrentWeapon(ANXRangedWeapon* NewWeapon);
 	void UpdatePresentationState();
 	void StopActiveEffects();
 	void TrackActiveEffect(UNiagaraComponent* NiagaraComponent);

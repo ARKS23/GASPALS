@@ -7,7 +7,7 @@
 #include "WeaponRecoilCameraModifier.h"
 #include "../Weapons/WeaponComponent.h"
 #include "../Weapons/WeaponPresentationComponent.h"
-#include "../Weapons/WeaponBase.h"
+#include "../Weapons/NXRangedWeapon.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPlayerRecoil, Log, All);
 
@@ -295,8 +295,8 @@ void UPlayerRecoilComponent::HandleRecoilRequested(
 
 void UPlayerRecoilComponent::HandleCurrentWeaponChanged(
 	UWeaponComponent* InWeaponComponent,
-	AWeaponBase* OldWeapon,
-	AWeaponBase* NewWeapon)
+	ANXRangedWeapon* OldWeapon,
+	ANXRangedWeapon* NewWeapon)
 {
 	if (InWeaponComponent != WeaponComponent.Get())
 	{

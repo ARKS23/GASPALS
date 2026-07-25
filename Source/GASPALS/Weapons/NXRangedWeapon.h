@@ -1,12 +1,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
+#include "../Equipment/NXEquipmentBase.h"
 #include "WeaponAccuracyTypes.h"
 #include "WeaponShotTypes.h"
-#include "WeaponBase.generated.h"
+#include "NXRangedWeapon.generated.h"
 
-class AWeaponBase;
+class ANXRangedWeapon;
 class USceneComponent;
 class USkeletalMeshComponent;
 class UWeaponDataAsset;
@@ -14,37 +14,37 @@ class UWeaponDataAsset;
 // 弹药变化事件：UI 可以绑定它刷新弹匣、备用弹药和换弹状态。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(
 	FOnWeaponAmmoChangedSignature,
-	AWeaponBase*, Weapon,
+	ANXRangedWeapon*, Weapon,
 	int32, AmmoInMagazine,
 	int32, ReserveAmmo,
 	bool, bIsReloading
 );
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWeaponSimpleSignature, AWeaponBase*, Weapon);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWeaponSimpleSignature, ANXRangedWeapon*, Weapon);
 
 // 成功射击事件：表现层通过完整上下文生成枪口火光、Tracer 等反馈。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnWeaponShotSignature,
-	AWeaponBase*, Weapon,
+	ANXRangedWeapon*, Weapon,
 	const FWeaponShotEvent&, ShotEvent
 );
 
 // 命中事件只在射线实际命中时触发，用于命中特效、命中音效或命中反馈。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnWeaponHitSignature,
-	AWeaponBase*, Weapon,
+	ANXRangedWeapon*, Weapon,
 	const FHitResult&, HitResult
 );
 
-// 武器基类负责运行时武器状态，不负责玩家输入绑定。
+// 远程武器负责弹药、射击和换弹等运行时状态，不负责玩家输入绑定。
 // 输入应由 Combat/Weapon Component 转发进来，这样玩家、敌人、防御塔都能复用同一套武器逻辑。
 UCLASS(Blueprintable)
-class GASPALS_API AWeaponBase : public AActor
+class GASPALS_API ANXRangedWeapon : public ANXEquipmentBase
 {
 	GENERATED_BODY()
 
 public:
-	AWeaponBase();
+	ANXRangedWeapon();
 
 	// 运行时初始化武器弹药和状态。更换 WeaponData 后也可以手动调用。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Setup")
@@ -55,6 +55,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Weapon|Setup")
 	UWeaponDataAsset* GetWeaponData() const { return WeaponData.Get(); }
+
+	/** 复用现有 WeaponDataAsset 作为远程武器动画族的唯一数据源。 */
+	virtual FGameplayTag GetEquipmentAnimationFamily() const override;
 
 	// 按下开火。半自动只打一发，全自动会启动定时连发。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Fire")

@@ -40,7 +40,11 @@ public:
 	/** 转发当前 ANXPlayerState 持有的 ASC；PlayerState 尚未就绪时返回 nullptr。 */
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
-	/** 按 Ability Asset Tag 请求激活已授予的 Ability。 */
+	/** 通过具体的 Combat.Action 子标签请求战斗动作，拒绝无效、根级或其他领域的标签。 */
+	UFUNCTION(BlueprintCallable, Category="NexAur|Combat")
+	bool RequestCombatAction(FGameplayTag ActionTag);
+
+	/** 按 Ability Asset Tag 请求激活已授予的 Ability；业务调用应优先使用领域入口。 */
 	UFUNCTION(BlueprintCallable, Category="NexAur|AbilitySystem")
 	bool TryActivateAbilityByTag(FGameplayTag AbilityTag);
 
