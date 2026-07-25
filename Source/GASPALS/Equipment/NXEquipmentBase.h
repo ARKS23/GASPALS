@@ -28,6 +28,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="NexAur|Equipment")
 	virtual FGameplayTag GetEquipmentAnimationFamily() const;
 
+	/** 返回装备建议使用的默认附着 Socket；角色侧配置可以覆盖它。 */
+	UFUNCTION(BlueprintPure, Category="NexAur|Equipment")
+	virtual FName GetDefaultAttachSocketName() const;
+
 	/** 当前装备拥有者是 Character 时返回该角色，否则返回 nullptr。 */
 	UFUNCTION(BlueprintPure, Category="NexAur|Equipment")
 	ACharacter* GetOwningCharacter() const;

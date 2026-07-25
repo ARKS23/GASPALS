@@ -46,7 +46,7 @@ enum class EWeaponPresentationState : uint8
 	Ready UMETA(DisplayName="Ready")
 };
 
-// 武器表现组件负责把 WeaponBase 的逻辑事件转换为角色侧视觉效果。
+// 武器表现组件负责把 ANXRangedWeapon 的逻辑事件转换为角色侧视觉效果。
 // 它不修改弹药、伤害、射速或逻辑枪口，GASPALS Overlay 只作为视觉挂载点。
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
 class GASPALS_API UWeaponPresentationComponent : public UActorComponent
@@ -56,7 +56,7 @@ class GASPALS_API UWeaponPresentationComponent : public UActorComponent
 public:
 	UWeaponPresentationComponent();
 
-	// 绑定角色的武器组件，并立即同步已经装备的 CurrentWeapon。
+	// 绑定角色的武器组件，并立即通过 GetCurrentWeapon() 同步已经装备的枪械。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Presentation")
 	void InitializePresentation(UWeaponComponent* InWeaponComponent);
 
@@ -68,7 +68,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Weapon|Presentation")
 	void ClearVisualSource();
 
-	// 重新读取 WeaponComponent.CurrentWeapon，用于初始化顺序变化或调试修复。
+	// 重新读取 WeaponComponent::GetCurrentWeapon()，用于初始化顺序变化或调试修复。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Presentation")
 	void RefreshCurrentWeaponBinding();
 
@@ -120,7 +120,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	// 视觉源失效时，是否回退到 WeaponBase 提供的逻辑枪口世界变换。
+	// 视觉源失效时，是否回退到 ANXRangedWeapon 提供的逻辑枪口世界变换。
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Presentation")
 	bool bUseLogicalMuzzleFallback = true;
 

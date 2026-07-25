@@ -58,6 +58,7 @@ public:
 
 	/** 复用现有 WeaponDataAsset 作为远程武器动画族的唯一数据源。 */
 	virtual FGameplayTag GetEquipmentAnimationFamily() const override;
+	virtual FName GetDefaultAttachSocketName() const override;
 
 	// 按下开火。半自动只打一发，全自动会启动定时连发。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Fire")
@@ -150,6 +151,8 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void OnEquipped(AActor* NewOwner) override;
+	virtual void OnUnequipped(AActor* PreviousOwner) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon|Components")
 	TObjectPtr<USceneComponent> SceneRoot;

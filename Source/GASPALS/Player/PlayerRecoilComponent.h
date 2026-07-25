@@ -42,7 +42,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Weapon|Recoil")
 	void ResetRecoil();
 
-	// WeaponBase 读取 GameplayAim 通道，保证逻辑射线与镜头使用同一份后坐力状态。
+	// ANXRangedWeapon 读取 GameplayAim 通道，保证逻辑射线与镜头使用同一份后坐力状态。
 	UFUNCTION(BlueprintPure, Category="Weapon|Recoil")
 	FVector2D GetLogicalAimRecoilDegrees() const { return CurrentGameplayAimOffsetDegrees; }
 

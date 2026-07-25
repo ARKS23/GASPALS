@@ -7,6 +7,7 @@
 class UCombatComponent;
 class UHealthComponent;
 class UWeaponComponent;
+class ANXRangedWeapon;
 
 // 瞄准状态变化事件：UI、相机、Overlay 或动画蓝图可以绑定它做表现同步。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -113,8 +114,16 @@ protected:
 
 private:
 	UFUNCTION()
+	void HandleCurrentWeaponChanged(
+		UWeaponComponent* InWeaponComponent,
+		ANXRangedWeapon* OldWeapon,
+		ANXRangedWeapon* NewWeapon);
+
+	UFUNCTION()
 	void HandleOwnerDeath(UHealthComponent* InHealthComponent, AActor* KillerActor);
 
+	void BindWeaponComponent(UWeaponComponent* NewWeaponComponent);
+	void UnbindWeaponComponent();
 	void BindHealthComponent();
 	void UnbindHealthComponent();
 	void StopOngoingCombatActions();

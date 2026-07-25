@@ -1,12 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/ActorComponent.h"
+#include "../Equipment/NXEquipmentComponent.h"
 #include "WeaponComponent.generated.h"
 
 class ANXRangedWeapon;
 class UWeaponComponent;
-class USkeletalMeshComponent;
 
 // 当前武器变化事件：UI、动画蓝图或表现层可以绑定它刷新武器显示。
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
@@ -16,17 +15,16 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	ANXRangedWeapon*, NewWeapon
 );
 
-// 武器组件是角色和武器 Actor 之间的装备管理层。
-// 它只负责生成、附着、卸下和转发请求，不负责输入绑定和具体射击命中逻辑。
+// 兼容现有枪械蓝图和调用方；通用装备状态与生命周期由 UNXEquipmentComponent 统一管理。
 UCLASS(ClassGroup=(Gameplay), meta=(BlueprintSpawnableComponent))
-class GASPALS_API UWeaponComponent : public UActorComponent
+class GASPALS_API UWeaponComponent : public UNXEquipmentComponent
 {
 	GENERATED_BODY()
 
 public:
 	UWeaponComponent();
 
-	// 生成并装备一把武器。第一阶段只维护一把 CurrentWeapon。
+	// 旧枪械入口保留强类型返回值，内部不再维护 CurrentWeapon 成员。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	ANXRangedWeapon* EquipWeapon(TSubclassOf<ANXRangedWeapon> WeaponClass);
 
@@ -40,7 +38,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	void DestroyCurrentWeapon();
 
-	// 当启用 bAttachWeaponActorToOwner 且 Socket 或 Mesh 配置调整后，可以手动重新附着当前武器。
+	// 当启用通用 Attach Equipment Actor To Owner 配置后，可以手动重新附着当前武器。
 	UFUNCTION(BlueprintCallable, Category="Weapon|Equipment")
 	bool ReattachCurrentWeapon();
 
@@ -67,9 +65,6 @@ public:
 	UFUNCTION(BlueprintPure, Category="Weapon|Equipment")
 	ANXRangedWeapon* GetCurrentWeapon() const;
 
-	UFUNCTION(BlueprintPure, Category="Weapon|Equipment")
-	USkeletalMeshComponent* GetOwnerMesh() const;
-
 	UFUNCTION(BlueprintPure, Category="Weapon|Ammo")
 	int32 GetAmmoInMagazine() const;
 
@@ -83,43 +78,17 @@ public:
 	FOnCurrentWeaponChangedSignature OnCurrentWeaponChanged;
 
 protected:
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
-	// BeginPlay 时自动装备的武器蓝图，例如 BP_Rifle。
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
-	TSubclassOf<ANXRangedWeapon> DefaultWeaponClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
-	bool bEquipDefaultWeaponOnBeginPlay = true;
-
-	// 如果这里不填，则优先使用 WeaponDataAsset 里的 EquipSocketName。
-	// 两者都没有有效 Socket 时，武器会附着到 Mesh 根部或 Actor Root。
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
-	FName WeaponAttachSocketName = NAME_None;
-
-	// 是否把逻辑武器 Actor 直接附着到拥有者身上。
-	// 默认关闭：玩家角色优先复用 GASPALS 的 OverlayPose -> AttachObjectToHand 表现链路，避免出现两把枪。
-	// 敌人、防御塔或非 GASPALS 角色如果需要显示这个武器 Actor，可以在蓝图中打开。
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
-	bool bAttachWeaponActorToOwner = false;
-
-	// 原型阶段默认销毁卸下的武器，避免场景里残留无主武器 Actor。
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Equipment")
-	bool bDestroyCurrentWeaponOnUnequip = true;
-
-	// 当前装备武器的运行时引用。不要在蓝图里直接改它，使用 Equip/Unequip 接口。
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon|Equipment")
+	/**
+	 * 只用于恢复旧蓝图中的 CurrentWeapon 变量节点。
+	 * BlueprintGetter 始终从 CurrentEquipment 转型，该字段本身从不写入，不构成第二份运行时状态。
+	 */
+	UPROPERTY(Transient, BlueprintGetter=GetCurrentWeapon, Category="Weapon|Equipment",
+		meta=(DeprecatedProperty, DeprecationMessage="请改用 GetCurrentWeapon()；真实状态由 CurrentEquipment 持有。"))
 	TObjectPtr<ANXRangedWeapon> CurrentWeapon;
 
 	// 给蓝图表现层的扩展点，例如切换 Overlay、播放拔枪动画或刷新 UI。
 	UFUNCTION(BlueprintImplementableEvent, Category="Weapon|Events")
 	void ReceiveCurrentWeaponChanged(ANXRangedWeapon* OldWeapon, ANXRangedWeapon* NewWeapon);
 
-private:
-	// 内部辅助函数保持私有，避免外部绕过装备流程直接生成或附着武器。
-	ANXRangedWeapon* SpawnWeapon(TSubclassOf<ANXRangedWeapon> WeaponClass) const;
-	void ApplyLogicalWeaponPresentation(ANXRangedWeapon* Weapon) const;
-	FName ResolveAttachSocketName(const ANXRangedWeapon* Weapon) const;
-	void BroadcastCurrentWeaponChanged(ANXRangedWeapon* OldWeapon, ANXRangedWeapon* NewWeapon);
+	virtual void HandleCurrentEquipmentChanged(ANXEquipmentBase* OldEquipment, ANXEquipmentBase* NewEquipment) override;
 };

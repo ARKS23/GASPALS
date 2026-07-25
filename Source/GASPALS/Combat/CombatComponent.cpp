@@ -32,6 +32,7 @@ void UCombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		FoundWeaponComponent->CancelReload();
 	}
+	UnbindWeaponComponent();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -41,11 +42,11 @@ bool UCombatComponent::FindRequiredComponents()
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor)
 	{
-		WeaponComponent = nullptr;
+		UnbindWeaponComponent();
 		return false;
 	}
 
-	WeaponComponent = OwnerActor->FindComponentByClass<UWeaponComponent>();
+	BindWeaponComponent(OwnerActor->FindComponentByClass<UWeaponComponent>());
 	return IsValid(WeaponComponent.Get());
 }
 
@@ -156,6 +157,23 @@ bool UCombatComponent::CanReload() const
 		&& FoundWeaponComponent->HasWeapon();
 }
 
+void UCombatComponent::HandleCurrentWeaponChanged(
+	UWeaponComponent* InWeaponComponent,
+	ANXRangedWeapon* /*OldWeapon*/,
+	ANXRangedWeapon* /*NewWeapon*/)
+{
+	if (InWeaponComponent != WeaponComponent.Get())
+	{
+		return;
+	}
+
+	// 卸下枪械或切换到非枪械装备时退出 ADS，避免下一把枪继承旧的瞄准意图。
+	if (!InWeaponComponent->HasWeapon())
+	{
+		SetAiming(false);
+	}
+}
+
 void UCombatComponent::HandleOwnerDeath(
 	UHealthComponent* InHealthComponent,
 	AActor* /*KillerActor*/)
@@ -164,6 +182,38 @@ void UCombatComponent::HandleOwnerDeath(
 	{
 		SetCombatEnabled(false);
 	}
+}
+
+void UCombatComponent::BindWeaponComponent(UWeaponComponent* NewWeaponComponent)
+{
+	if (WeaponComponent != NewWeaponComponent)
+	{
+		UnbindWeaponComponent();
+		WeaponComponent = NewWeaponComponent;
+	}
+
+	if (IsValid(WeaponComponent.Get()))
+	{
+		WeaponComponent->OnCurrentWeaponChanged.AddUniqueDynamic(
+			this, &UCombatComponent::HandleCurrentWeaponChanged);
+	}
+
+	// 初始化顺序不固定，因此绑定后立即从兼容 Getter 同步一次，而不是只等待下一次事件。
+	if (!IsValid(WeaponComponent.Get()) || !WeaponComponent->HasWeapon())
+	{
+		SetAiming(false);
+	}
+}
+
+void UCombatComponent::UnbindWeaponComponent()
+{
+	if (IsValid(WeaponComponent.Get()))
+	{
+		WeaponComponent->OnCurrentWeaponChanged.RemoveDynamic(
+			this, &UCombatComponent::HandleCurrentWeaponChanged);
+	}
+
+	WeaponComponent = nullptr;
 }
 
 void UCombatComponent::BindHealthComponent()

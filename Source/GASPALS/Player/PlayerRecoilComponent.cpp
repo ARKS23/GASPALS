@@ -142,6 +142,9 @@ bool UPlayerRecoilComponent::FindRequiredComponents()
 			WeaponComponent->OnCurrentWeaponChanged.AddUniqueDynamic(
 				this, &UPlayerRecoilComponent::HandleCurrentWeaponChanged);
 		}
+
+		// 组件替换与换枪具有相同语义，不能把旧组件产生的偏移带入新的装备链。
+		ResetRecoil();
 	}
 
 	return IsValid(PresentationComponent.Get());
@@ -295,8 +298,8 @@ void UPlayerRecoilComponent::HandleRecoilRequested(
 
 void UPlayerRecoilComponent::HandleCurrentWeaponChanged(
 	UWeaponComponent* InWeaponComponent,
-	ANXRangedWeapon* OldWeapon,
-	ANXRangedWeapon* NewWeapon)
+	ANXRangedWeapon* /*OldWeapon*/,
+	ANXRangedWeapon* /*NewWeapon*/)
 {
 	if (InWeaponComponent != WeaponComponent.Get())
 	{

@@ -80,7 +80,7 @@ FCrosshairHUDState UCombatHUDWidgetBase::GetCrosshairHUDState() const
 
 	if (State.bHasWeapon)
 	{
-		// HUD 只复制 WeaponBase 发布的只读精度快照，不在 UI 层重新计算 Gameplay 散布。
+		// HUD 只复制 ANXRangedWeapon 发布的只读精度快照，不在 UI 层重新计算 Gameplay 散布。
 		const FWeaponAccuracyState AccuracyState = Weapon->GetAccuracyState();
 		State.NormalizedSpread = FMath::IsFinite(AccuracyState.NormalizedSpread)
 			? FMath::Clamp(AccuracyState.NormalizedSpread, 0.0f, 1.0f)
@@ -259,15 +259,16 @@ void UCombatHUDWidgetBase::PushCrosshairHUDState(bool bForce)
 
 void UCombatHUDWidgetBase::HandleCurrentWeaponChanged(
 	UWeaponComponent* InWeaponComponent,
-	ANXRangedWeapon* OldWeapon,
-	ANXRangedWeapon* NewWeapon)
+	ANXRangedWeapon* /*OldWeapon*/,
+	ANXRangedWeapon* /*NewWeapon*/)
 {
 	if (InWeaponComponent != WeaponComponent.Get())
 	{
 		return;
 	}
 
-	BindWeapon(NewWeapon);
+	// 事件只触发刷新，绑定对象从兼容 Getter 重读，保证 HUD 不持有另一份权威装备状态。
+	BindWeapon(InWeaponComponent->GetCurrentWeapon());
 	PushWeaponHUDState();
 	// 即使两把武器当前数值相同，也要让蓝图重新接收新武器的初始准心状态。
 	PushCrosshairHUDState(true);

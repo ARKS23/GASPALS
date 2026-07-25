@@ -144,6 +144,11 @@ FGameplayTag ANXRangedWeapon::GetEquipmentAnimationFamily() const
 	return IsValid(WeaponData.Get()) ? WeaponData->WeaponAnimationFamily : FGameplayTag();
 }
 
+FName ANXRangedWeapon::GetDefaultAttachSocketName() const
+{
+	return IsValid(WeaponData.Get()) ? WeaponData->EquipSocketName : NAME_None;
+}
+
 void ANXRangedWeapon::BeginPlay()
 {
 	Super::BeginPlay();
@@ -162,6 +167,22 @@ void ANXRangedWeapon::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	StopAccuracyContextRefreshTimer();
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void ANXRangedWeapon::OnEquipped(AActor* NewOwner)
+{
+	Super::OnEquipped(NewOwner);
+
+	// Spawn 后 BeginPlay 通常已经初始化过；正式装备时再次重置，确保运行时换装备不继承旧状态。
+	InitializeWeapon();
+}
+
+void ANXRangedWeapon::OnUnequipped(AActor* PreviousOwner)
+{
+	// 装备 Actor 自己清理内部状态，通用 EquipmentComponent 不需要理解枪械计时器。
+	StopFire();
+	CancelReload();
+	Super::OnUnequipped(PreviousOwner);
 }
 
 void ANXRangedWeapon::InitializeWeapon()

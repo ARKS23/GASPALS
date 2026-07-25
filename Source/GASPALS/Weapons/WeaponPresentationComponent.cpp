@@ -89,7 +89,7 @@ void UWeaponPresentationComponent::SetVisualSource(USkeletalMeshComponent* InMes
 	VisualMesh = InMesh;
 	VisualMuzzleSocket = InMuzzleSocket;
 
-	// 武器组件已经先设置 CurrentWeapon，因此即使蓝图回调先执行，也能记录正确归属。
+	// 武器组件已经先更新权威 CurrentEquipment，因此即使蓝图回调先执行，也能记录正确归属。
 	VisualSourceWeapon = IsValid(WeaponComponent.Get())
 		? WeaponComponent->GetCurrentWeapon()
 		: CurrentWeapon.Get();
@@ -174,15 +174,16 @@ void UWeaponPresentationComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 
 void UWeaponPresentationComponent::HandleCurrentWeaponChanged(
 	UWeaponComponent* InWeaponComponent,
-	ANXRangedWeapon* OldWeapon,
-	ANXRangedWeapon* NewWeapon)
+	ANXRangedWeapon* /*OldWeapon*/,
+	ANXRangedWeapon* /*NewWeapon*/)
 {
 	if (InWeaponComponent != WeaponComponent.Get())
 	{
 		return;
 	}
 
-	SetCurrentWeapon(NewWeapon);
+	// 事件只负责通知变化；当前枪械始终从兼容 Getter 读取，避免形成第二份权威状态。
+	SetCurrentWeapon(InWeaponComponent->GetCurrentWeapon());
 }
 
 void UWeaponPresentationComponent::HandleWeaponShot(ANXRangedWeapon* Weapon, const FWeaponShotEvent& ShotEvent)

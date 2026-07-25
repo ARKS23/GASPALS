@@ -4,7 +4,7 @@
 >
 > 前置条件：阶段 1 的枪械/GASPALS 回归与系统文档完成后开始
 >
-> 当前状态：进行中（5.1、5.2 C++ 已完成，待编辑器运行时验收）
+> 当前状态：进行中（5.1 至 5.4 C++ 已完成，待编辑器运行时验收）
 
 ## 1. 目标
 
@@ -218,6 +218,13 @@ Source/GASPALS/Weapons/WeaponComponent.h/.cpp
 
 兼容 API 必须从 `CurrentEquipment` 类型转换，不保存第二个运行时武器指针。若 UPROPERTY 名称发生变化，使用 Core Redirect 并重新编译、保存相关蓝图。
 
+本次实现还完成了：
+
+- 将默认装备、附着 Socket、显示策略和卸装销毁配置迁移到通用组件。
+- `ANXRangedWeapon` 在自身生命周期钩子中初始化弹药并清理开火/换弹状态。
+- 使用 Property Redirect 将旧 `WeaponComponent` 属性迁移到 `NXEquipmentComponent`，保留现有蓝图配置。
+- 旧蓝图的 `CurrentWeapon` 变量节点通过只读 Blueprint Getter 兼容；字段本身不写入，真实状态仍只有 `CurrentEquipment`。
+
 验收：`BP_PlayerCharacter` 仍只有原来的 `WeaponComponent` 实例；装备、卸装、换枪和委托每次只执行一次。
 
 ### 5.4 适配现有调用方
@@ -237,6 +244,13 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 - `CombatComponent` 不新增 GAS 状态副本，不把 Tag 再保存成 bool。
 - Presentation、Recoil、HUD 仍消费枪械强类型事件，不在本阶段泛化成巨大通用组件。
 - 编译迁移完成后搜索所有 `CurrentWeapon` 直接访问，确保只有兼容 getter 和内部适配代码。
+
+本次适配完成了：
+
+- `CombatComponent` 监听强类型武器变化事件，卸枪或切换到非枪械装备时统一退出 ADS。
+- Presentation 与 HUD 将变化事件视为刷新信号，并通过 `GetCurrentWeapon()` 重读权威枪械。
+- Recoil 在重新绑定武器组件时清理旧偏移，换枪事件仍只消费枪械强类型事件。
+- C++ 调用方审计未发现对 `CurrentEquipment` 的直接写入，也没有新增 GAS 状态副本。
 
 ## 6. 编辑器接入
 
@@ -299,8 +313,8 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 |---|---|
 | 2.1 Tag 治理与 Action 入口 | C++ 已完成，待编辑器运行时验收 |
 | 2.2 通用 Equipment Actor | C++ 已完成，待编辑器迁移与回归 |
-| 2.3 通用 Equipment Component 与兼容层 | 待开发 |
-| 2.4 现有调用方适配 | 待开发 |
+| 2.3 通用 Equipment Component 与兼容层 | C++ 已完成，待编辑器迁移与回归 |
+| 2.4 现有调用方适配 | C++ 已完成，待编辑器运行时验收 |
 | 2.5 编辑器迁移与蓝图编译 | 待开发 |
 | 2.6 Action/Equipment/枪械回归 | 待测试 |
 | 2.7 系统文档与路线图同步 | 待开发 |

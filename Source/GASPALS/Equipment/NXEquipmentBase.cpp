@@ -15,6 +15,11 @@ FGameplayTag ANXEquipmentBase::GetEquipmentAnimationFamily() const
 	return FGameplayTag();
 }
 
+FName ANXEquipmentBase::GetDefaultAttachSocketName() const
+{
+	return NAME_None;
+}
+
 ACharacter* ANXEquipmentBase::GetOwningCharacter() const
 {
 	return bIsEquipped ? Cast<ACharacter>(GetOwner()) : nullptr;
