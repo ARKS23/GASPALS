@@ -14,6 +14,15 @@ namespace NXGameplayTags
 	/** 阶段 1 测试 Ability 激活期间持有的状态标签。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_State_TestAbilityActive);
 
+	/** 角色已经死亡；后续由死亡状态 GameplayEffect 持有该标签。 */
+	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_State_Dead);
+
+	/** 通过 SetByCaller 传入伤害 GameplayEffect 的基础伤害值。 */
+	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Base);
+
+	/** 通过 SetByCaller 传入治疗 GameplayEffect 的基础治疗值。 */
+	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Healing_Base);
+
 	/** 所有装备 Gameplay 分类的根标签；根标签本身不表示具体装备类型。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equipment_Category);
 

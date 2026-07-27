@@ -1,6 +1,7 @@
 #include "NXCharacterBase.h"
 
 #include "../AbilitySystem/NXGameplayTags.h"
+#include "../AbilitySystem/Vitals/NXVitalsComponent.h"
 #include "../Combat/CombatComponent.h"
 #include "../Player/NXPlayerState.h"
 #include "../Weapons/WeaponPresentationComponent.h"
@@ -16,6 +17,9 @@ DEFINE_LOG_CATEGORY_STATIC(LogNXCharacterAbilitySystem, Log, All);
 ANXCharacterBase::ANXCharacterBase(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	// 核心属性观察器由 C++ 基类统一提供；它只绑定 PlayerState ASC，不复制属性状态。
+	VitalsComponent = CreateDefaultSubobject<UNXVitalsComponent>(TEXT("VitalsComponent"));
+
 	// 基类不主动创建项目组件，避免破坏现有角色蓝图的组件组合方式。
 	// 需要 CombatComponent 的角色可以继续在蓝图中添加它，基类只负责读取。
 }
@@ -34,6 +38,16 @@ void ANXCharacterBase::PossessedBy(AController* NewController)
 
 	// PossessedBy 只在服务端（或 Standalone）触发，此时 PlayerState 已完成权威绑定。
 	InitializeAbilitySystemFromPlayerState();
+}
+
+void ANXCharacterBase::UnPossessed()
+{
+	if (IsValid(VitalsComponent.Get()))
+	{
+		VitalsComponent->UninitializeFromAbilitySystem();
+	}
+
+	Super::UnPossessed();
 }
 
 void ANXCharacterBase::OnRep_PlayerState()
@@ -125,6 +139,11 @@ void ANXCharacterBase::InitializeAbilitySystemFromPlayerState()
 	ANXPlayerState* NXPlayerState = GetPlayerState<ANXPlayerState>();
 	if (!IsValid(NXPlayerState))
 	{
+		if (IsValid(VitalsComponent.Get()))
+		{
+			VitalsComponent->UninitializeFromAbilitySystem();
+		}
+
 		const APlayerState* CurrentPlayerState = GetPlayerState();
 		UE_LOG(LogNXCharacterAbilitySystem, Warning,
 			TEXT("角色 %s 无法初始化 GAS：当前 PlayerState %s 不是 ANXPlayerState。"),
@@ -134,6 +153,10 @@ void ANXCharacterBase::InitializeAbilitySystemFromPlayerState()
 	}
 
 	NXPlayerState->InitializeAbilitySystem(this);
+	if (IsValid(VitalsComponent.Get()) && !VitalsComponent->InitializeWithAbilitySystem(NXPlayerState->GetAbilitySystemComponent()))
+	{
+		UE_LOG(LogNXCharacterAbilitySystem, Error, TEXT("角色 %s 无法把 PlayerState ASC 注入 VitalsComponent。"), *GetNameSafe(this));
+	}
 }
 
 FNXWeaponAccuracyContext ANXCharacterBase::GetWeaponAccuracyContext_Implementation() const
@@ -158,6 +181,11 @@ void ANXCharacterBase::BeginPlay()
 
 void ANXCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (IsValid(VitalsComponent.Get()))
+	{
+		VitalsComponent->UninitializeFromAbilitySystem();
+	}
+
 	UnbindWeaponAnimationExecutor();
 	ActiveWeaponAnimationMontages.Reset();
 	CachedCombatComponent = nullptr;

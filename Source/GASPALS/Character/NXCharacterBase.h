@@ -13,6 +13,7 @@ class UAnimInstance;
 class UAnimMontage;
 class UAbilitySystemComponent;
 class UCombatComponent;
+class UNXVitalsComponent;
 class UWeaponPresentationComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -39,6 +40,10 @@ public:
 
 	/** 转发当前 ANXPlayerState 持有的 ASC；PlayerState 尚未就绪时返回 nullptr。 */
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	/** 返回角色的 GAS 属性观察组件；生命值与死亡状态仍由 PlayerState ASC 持有。 */
+	UFUNCTION(BlueprintPure, Category="NexAur|Vitals")
+	UNXVitalsComponent* GetVitalsComponent() const { return VitalsComponent.Get(); }
 
 	/** 通过具体的 Combat.Action 子标签请求战斗动作，拒绝无效、根级或其他领域的标签。 */
 	UFUNCTION(BlueprintCallable, Category="NexAur|Combat")
@@ -93,6 +98,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
 	virtual void OnRep_PlayerState() override;
 
 	/**
@@ -111,6 +117,10 @@ protected:
 	FGameplayTag CharacterAnimationFamily;
 
 private:
+	/** 只观察 PlayerState ASC，不持有第二份 Health、Stamina 或死亡状态。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="NexAur|Vitals", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UNXVitalsComponent> VitalsComponent;
+
 	/** 从当前 PlayerState 建立 GAS Owner/Avatar 关系，不在角色上创建或缓存第二个 ASC。 */
 	void InitializeAbilitySystemFromPlayerState();
 
