@@ -1,28 +1,34 @@
 #pragma once
 
+#include "AbilitySystemInterface.h"
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "DamageTestTarget.generated.h"
 
-class UHealthComponent;
+class UAbilitySystemComponent;
+class UGameplayEffect;
+class UNXVitalsAttributeSet;
+class UNXVitalsComponent;
 class USceneComponent;
 class UStaticMeshComponent;
 
 // 用于验证射击、伤害和死亡链路的轻量测试目标，不包含敌人 AI 或战斗行为。
 UCLASS(Blueprintable)
-class GASPALS_API ADamageTestTarget : public AActor
+class GASPALS_API ADamageTestTarget : public AActor, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
 public:
 	ADamageTestTarget();
 
-	// 恢复目标的初始可见性、碰撞和生命值，便于在 PIE 中重复测试。
-	UFUNCTION(BlueprintCallable, Category="Test Target")
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	// 服务端移除死亡 Effect、重新应用默认属性，并恢复测试目标表现。
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Test Target")
 	void ResetTarget();
 
 	UFUNCTION(BlueprintPure, Category="Test Target|Components")
-	UHealthComponent* GetHealthComponent() const { return HealthComponent.Get(); }
+	UNXVitalsComponent* GetVitalsComponent() const { return VitalsComponent.Get(); }
 
 	UFUNCTION(BlueprintPure, Category="Test Target|Components")
 	UStaticMeshComponent* GetTargetMesh() const { return TargetMesh.Get(); }
@@ -38,7 +44,19 @@ protected:
 	TObjectPtr<UStaticMeshComponent> TargetMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Test Target|Components")
-	TObjectPtr<UHealthComponent> HealthComponent;
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+
+	/** 测试目标的 Health/Stamina 唯一数据源，与自身 ASC 共享生命周期。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Test Target|Components")
+	TObjectPtr<UNXVitalsAttributeSet> VitalsAttributeSet;
+
+	/** 只观察 ASC 属性与死亡 Tag，不保存第二份生命值或死亡状态。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Test Target|Components")
+	TObjectPtr<UNXVitalsComponent> VitalsComponent;
+
+	/** 初始化及重置测试目标核心属性的 Instant GameplayEffect。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Test Target|Vitals")
+	TSubclassOf<UGameplayEffect> DefaultVitalsEffect;
 
 	// 死亡后隐藏整个 Actor；关闭后可以在蓝图事件中播放持续死亡动画。
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Test Target|Death")
@@ -64,15 +82,22 @@ protected:
 	void ReceiveTargetReset();
 
 private:
-	UFUNCTION()
-	void HandleHealthChanged(
-		UHealthComponent* InHealthComponent,
-		float NewHealth,
-		float Delta,
-		AActor* SourceActor);
+	bool ApplyDefaultVitalsEffect();
+	void RestoreTargetPresentation();
 
 	UFUNCTION()
-	void HandleDeath(UHealthComponent* InHealthComponent, AActor* KillerActor);
+	void HandleHealthChanged(
+		UNXVitalsComponent* InVitalsComponent,
+		float OldHealth,
+		float NewHealth,
+		AActor* EffectInstigator,
+		AActor* EffectCauser);
+
+	UFUNCTION()
+	void HandleDeath(UNXVitalsComponent* InVitalsComponent, AActor* EffectInstigator, AActor* EffectCauser);
+
+	UFUNCTION()
+	void HandleDeathStateChanged(UNXVitalsComponent* InVitalsComponent, bool bIsDead);
 
 	bool bDeathHandled = false;
 	bool bInitialActorHidden = false;

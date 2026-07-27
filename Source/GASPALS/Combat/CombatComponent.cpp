@@ -1,8 +1,8 @@
 #include "CombatComponent.h"
 
-#include "GameFramework/Actor.h"
-#include "../Health/HealthComponent.h"
+#include "../AbilitySystem/Vitals/NXVitalsComponent.h"
 #include "../Weapons/WeaponComponent.h"
+#include "GameFramework/Actor.h"
 
 UCombatComponent::UCombatComponent()
 {
@@ -19,12 +19,12 @@ void UCombatComponent::BeginPlay()
 		FindRequiredComponents();
 	}
 
-	BindHealthComponent();
+	BindVitalsComponent();
 }
 
 void UCombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	UnbindHealthComponent();
+	UnbindVitalsComponent();
 
 	// 组件销毁时停止持续动作，避免武器 Timer 在 Owner 销毁过程中继续工作。
 	StopFire();
@@ -62,6 +62,12 @@ bool UCombatComponent::HasWeaponComponent() const
 
 void UCombatComponent::SetCombatEnabled(bool bNewCombatEnabled)
 {
+	// 死亡 Tag 存在时拒绝重新开启；未来重生流程应先移除死亡 Effect，再显式启用战斗。
+	if (bNewCombatEnabled && IsOwnerDead())
+	{
+		bNewCombatEnabled = false;
+	}
+
 	const bool bStateChanged = bCombatEnabled != bNewCombatEnabled;
 	bCombatEnabled = bNewCombatEnabled;
 
@@ -103,6 +109,7 @@ bool UCombatComponent::CanAim() const
 
 	// 第一阶段只有持有武器时才允许进入瞄准状态，避免空手也切射击表现。
 	return bCombatEnabled
+		&& !IsOwnerDead()
 		&& FoundWeaponComponent
 		&& FoundWeaponComponent->HasWeapon();
 }
@@ -133,6 +140,7 @@ bool UCombatComponent::CanStartFire() const
 	const UWeaponComponent* FoundWeaponComponent = GetWeaponComponent();
 
 	return bCombatEnabled
+		&& !IsOwnerDead()
 		&& FoundWeaponComponent
 		&& FoundWeaponComponent->HasWeapon();
 }
@@ -153,6 +161,7 @@ bool UCombatComponent::CanReload() const
 	const UWeaponComponent* FoundWeaponComponent = GetWeaponComponent();
 
 	return bCombatEnabled
+		&& !IsOwnerDead()
 		&& FoundWeaponComponent
 		&& FoundWeaponComponent->HasWeapon();
 }
@@ -175,10 +184,11 @@ void UCombatComponent::HandleCurrentWeaponChanged(
 }
 
 void UCombatComponent::HandleOwnerDeath(
-	UHealthComponent* InHealthComponent,
-	AActor* /*KillerActor*/)
+	UNXVitalsComponent* InVitalsComponent,
+	AActor* /*EffectInstigator*/,
+	AActor* /*EffectCauser*/)
 {
-	if (InHealthComponent == HealthComponent.Get())
+	if (InVitalsComponent == VitalsComponent.Get())
 	{
 		SetCombatEnabled(false);
 	}
@@ -216,9 +226,9 @@ void UCombatComponent::UnbindWeaponComponent()
 	WeaponComponent = nullptr;
 }
 
-void UCombatComponent::BindHealthComponent()
+void UCombatComponent::BindVitalsComponent()
 {
-	UnbindHealthComponent();
+	UnbindVitalsComponent();
 
 	if (!bDisableCombatOnOwnerDeath)
 	{
@@ -226,21 +236,30 @@ void UCombatComponent::BindHealthComponent()
 	}
 
 	AActor* OwnerActor = GetOwner();
-	HealthComponent = OwnerActor ? OwnerActor->FindComponentByClass<UHealthComponent>() : nullptr;
-	if (IsValid(HealthComponent.Get()))
+	VitalsComponent = OwnerActor ? OwnerActor->FindComponentByClass<UNXVitalsComponent>() : nullptr;
+	if (IsValid(VitalsComponent.Get()))
 	{
-		HealthComponent->OnDeath.AddUniqueDynamic(this, &UCombatComponent::HandleOwnerDeath);
+		VitalsComponent->OnDeath.AddUniqueDynamic(this, &UCombatComponent::HandleOwnerDeath);
+		if (VitalsComponent->IsDead())
+		{
+			SetCombatEnabled(false);
+		}
 	}
 }
 
-void UCombatComponent::UnbindHealthComponent()
+void UCombatComponent::UnbindVitalsComponent()
 {
-	if (IsValid(HealthComponent.Get()))
+	if (IsValid(VitalsComponent.Get()))
 	{
-		HealthComponent->OnDeath.RemoveDynamic(this, &UCombatComponent::HandleOwnerDeath);
+		VitalsComponent->OnDeath.RemoveDynamic(this, &UCombatComponent::HandleOwnerDeath);
 	}
 
-	HealthComponent = nullptr;
+	VitalsComponent = nullptr;
+}
+
+bool UCombatComponent::IsOwnerDead() const
+{
+	return IsValid(VitalsComponent.Get()) && VitalsComponent->IsDead();
 }
 
 void UCombatComponent::StopOngoingCombatActions()

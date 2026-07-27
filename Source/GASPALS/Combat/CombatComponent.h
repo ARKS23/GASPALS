@@ -5,7 +5,7 @@
 #include "CombatComponent.generated.h"
 
 class UCombatComponent;
-class UHealthComponent;
+class UNXVitalsComponent;
 class UWeaponComponent;
 class ANXRangedWeapon;
 
@@ -88,7 +88,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat|Setup")
 	bool bAutoFindWeaponComponentOnBeginPlay = true;
 
-	// 存在 HealthComponent 时自动监听死亡，并通过统一战斗关闭流程停止持续动作。
+	// 存在 VitalsComponent 时自动监听死亡，并通过统一战斗关闭流程停止持续动作。
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat|Setup")
 	bool bDisableCombatOnOwnerDeath = true;
 
@@ -103,7 +103,7 @@ protected:
 	TObjectPtr<UWeaponComponent> WeaponComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UHealthComponent> HealthComponent;
+	TObjectPtr<UNXVitalsComponent> VitalsComponent;
 
 	// 给蓝图表现层的扩展点，例如切换 GASPALS Overlay、调整相机或显示准星。
 	UFUNCTION(BlueprintImplementableEvent, Category="Combat|Events")
@@ -120,12 +120,13 @@ private:
 		ANXRangedWeapon* NewWeapon);
 
 	UFUNCTION()
-	void HandleOwnerDeath(UHealthComponent* InHealthComponent, AActor* KillerActor);
+	void HandleOwnerDeath(UNXVitalsComponent* InVitalsComponent, AActor* EffectInstigator, AActor* EffectCauser);
 
 	void BindWeaponComponent(UWeaponComponent* NewWeaponComponent);
 	void UnbindWeaponComponent();
-	void BindHealthComponent();
-	void UnbindHealthComponent();
+	void BindVitalsComponent();
+	void UnbindVitalsComponent();
+	bool IsOwnerDead() const;
 	void StopOngoingCombatActions();
 	void BroadcastAimingChanged();
 	void BroadcastCombatEnabledChanged();

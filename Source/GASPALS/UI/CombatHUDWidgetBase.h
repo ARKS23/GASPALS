@@ -10,7 +10,7 @@
 class APawn;
 class ANXRangedWeapon;
 class UCombatComponent;
-class UHealthComponent;
+class UNXVitalsComponent;
 class UWeaponComponent;
 class UWeaponPresentationComponent;
 
@@ -77,7 +77,7 @@ private:
 	TObjectPtr<UWeaponPresentationComponent> WeaponPresentationComponent;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UHealthComponent> HealthComponent;
+	TObjectPtr<UNXVitalsComponent> VitalsComponent;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ANXRangedWeapon> BoundWeapon;
@@ -122,13 +122,17 @@ private:
 
 	UFUNCTION()
 	void HandleHealthChanged(
-		UHealthComponent* InHealthComponent,
+		UNXVitalsComponent* InVitalsComponent,
+		float OldHealth,
 		float NewHealth,
-		float Delta,
-		AActor* SourceActor);
+		AActor* EffectInstigator,
+		AActor* EffectCauser);
 
 	UFUNCTION()
-	void HandleDeath(UHealthComponent* InHealthComponent, AActor* KillerActor);
+	void HandleMaxHealthChanged(UNXVitalsComponent* InVitalsComponent, float OldMaxHealth, float NewMaxHealth);
+
+	UFUNCTION()
+	void HandleDeathStateChanged(UNXVitalsComponent* InVitalsComponent, bool bIsDead);
 
 	UFUNCTION()
 	void HandleHitConfirmed(

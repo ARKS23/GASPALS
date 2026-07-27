@@ -86,6 +86,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="NexAur|Vitals")
 	bool IsDead() const;
 
+	/** 仅移除本组件应用的死亡状态 Effect；不会恢复属性或重新启用战斗。 */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="NexAur|Vitals|Death")
+	bool RemoveDeadStateEffect();
+
 	UPROPERTY(BlueprintAssignable, Category="NexAur|Vitals|Events")
 	FOnNXHealthChangedSignature OnHealthChanged;
 

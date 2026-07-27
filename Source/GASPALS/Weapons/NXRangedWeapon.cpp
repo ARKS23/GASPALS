@@ -1,7 +1,7 @@
 #include "NXRangedWeapon.h"
 
 #include "../AbilitySystem/NXGameplayTags.h"
-#include "../Health/HealthComponent.h"
+#include "../Combat/NXCombatEffectLibrary.h"
 #include "../Player/PlayerRecoilComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -331,14 +331,19 @@ bool ANXRangedWeapon::FireOnceFromTrace(const FVector& TraceStart, const FVector
 	{
 		if (AActor* HitActor = HitResult.GetActor())
 		{
-			// 第一阶段直接找 HealthComponent 扣血；后续可替换为 UE Damage 或 Gameplay Effect。
-			if (UHealthComponent* HealthComponent = HitActor->FindComponentByClass<UHealthComponent>())
-			{
-				bDamageApplied = HealthComponent->ApplyDamage(WeaponData->Damage, GetDamageCauser());
+			FNXDamageApplyParams DamageParams;
+			DamageParams.SourceActor = GetDamageSourceActor();
+			DamageParams.TargetActor = HitActor;
+			DamageParams.EffectCauser = this;
+			DamageParams.DamageEffectClass = WeaponData->DamageEffectClass;
+			DamageParams.BaseDamage = WeaponData->Damage;
+			DamageParams.bHasHitResult = true;
+			DamageParams.HitResult = HitResult;
 
-				// 必须确认本次伤害实际生效，避免把已经死亡的目标重复统计为本枪击杀。
-				bKilledTarget = bDamageApplied && HealthComponent->IsDead();
-			}
+			// 武器不再直接查找或修改生命组件；统一入口负责 ASC、权威和 EffectContext 校验。
+			const FNXDamageApplyResult DamageResult = UNXCombatEffectLibrary::ApplyDamage(DamageParams);
+			bDamageApplied = DamageResult.bDamageApplied;
+			bKilledTarget = DamageResult.bKilledTarget;
 		}
 
 		OnWeaponHit.Broadcast(this, HitResult);
@@ -680,9 +685,9 @@ FVector ANXRangedWeapon::GetMuzzleLocation() const
 	return GetActorLocation();
 }
 
-AActor* ANXRangedWeapon::GetDamageCauser() const
+AActor* ANXRangedWeapon::GetDamageSourceActor() const
 {
-	// 伤害来源优先归到持有者，方便后续统计击杀、资源奖励或仇恨来源。
+	// SourceActor 表示攻击归属；武器 Actor 自身会单独作为 EffectCauser 写入上下文。
 	if (AActor* OwnerActor = GetOwner())
 	{
 		return OwnerActor;

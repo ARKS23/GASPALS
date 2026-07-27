@@ -6,7 +6,7 @@
 >
 > 执行位置：阶段 2 完成后、第一条近战伤害链接入前
 >
-> 当前状态：开发中（5.1 C++ 已完成并通过构建）
+> 当前状态：5.5 迁移与清理已完成，待单机交互和联机验收
 
 ## 1. 目标
 
@@ -71,7 +71,7 @@ ANXPlayerState
 ANXCharacterBase                           // 当前 Avatar
 └── UNXVitalsComponent                     // 只读观察与蓝图事件桥接
 
-ANXDamageTestTarget
+ADamageTestTarget
 ├── AbilitySystemComponent                 // 非 PlayerState Actor 自己持有
 ├── UNXVitalsAttributeSet
 └── UNXVitalsComponent
@@ -81,7 +81,7 @@ ANXDamageTestTarget
 
 ## 4. 调用链
 
-当前链路：
+迁移前链路：
 
 ```text
 NXRangedWeapon
@@ -204,28 +204,41 @@ GameplayEffect 是数值配置资产，不在蓝图 Event Graph 中编写扣血�
 Source/GASPALS/Weapons/NXRangedWeapon.h/.cpp
 Source/GASPALS/Weapons/WeaponDataAsset.h
 Source/GASPALS/Test/DamageTestTarget.h/.cpp
+Source/GASPALS/AbilitySystem/Vitals/NXVitalsComponent.h/.cpp
 Source/GASPALS/Combat/CombatComponent.h/.cpp
 Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
-Source/GASPALS/UI/CombatHUDTypes.h
+Source/GASPALS/UI/CombatHUDTypes.h（保持蓝图字段兼容）
 ```
 
 按以下顺序迁移：
 
-1. `DamageTestTarget` 实现 `IAbilitySystemInterface`，持有 ASC、AttributeSet 和 VitalsComponent，先独立验证 Damage/Heal/Dead。
-2. `WeaponDataAsset` 增加 Damage GameplayEffect Class；`NXRangedWeapon` 删除对 `UHealthComponent` 的查找，改用统一伤害入口。
-3. 保持 `FWeaponTraceResult` 的 `bDamageApplied/bKilledTarget` 语义不变；`bKilledTarget` 只表示本次伤害让目标从存活进入死亡，不能把命中已死亡目标算作本枪击杀。
-4. `CombatComponent` 通过 Dead Tag 或 VitalsComponent 事件停止持续动作，不保存新的死亡 bool。
-5. `CombatHUDWidgetBase` 从 VitalsComponent 生成原有 `FPlayerHUDState` 快照，先保留 UMG 已使用的字段名，单独安排资产重存后再做命名清理。
+1. `DamageTestTarget` 实现 `IAbilitySystemInterface`，自身持有 ASC、AttributeSet 和 VitalsComponent；服务端应用默认属性 Effect，原有受击、死亡和重置蓝图事件保持不变。
+2. `UNXVitalsComponent` 提供只移除自身死亡 Effect Handle 的服务端接口；测试目标先成功恢复默认属性，再移除 Dead Effect，避免配置失败时留下半复活状态。
+3. `WeaponDataAsset` 增加 Damage GameplayEffect Class；`NXRangedWeapon` 删除对 `UHealthComponent` 的查找，改用统一伤害入口，并明确区分角色 SourceActor 与武器 EffectCauser。
+4. 保持 `FWeaponTraceResult` 的 `bDamageApplied/bKilledTarget` 语义不变；`bKilledTarget` 只表示本次伤害让目标从存活进入死亡，不能把命中已死亡目标算作本枪击杀。
+5. `CombatComponent` 监听 VitalsComponent 死亡事件并在动作入口查询 Dead Tag；死亡时停止开火、取消换弹并退出 ADS，不保存新的死亡 bool。
+6. `CombatHUDWidgetBase` 监听 Health、MaxHealth 和 Dead Tag，从 VitalsComponent 生成 `FPlayerHUDState`；HUD 数据源字段最终命名为 `bHasVitalsComponent`。
+
+本步骤不删除旧 `HealthComponent` 类，也不做新旧属性双写；旧类只为 5.5 的蓝图引用迁移暂时保留。
 
 ### 5.5 编辑器：角色接入与旧组件清理
 
 1. 完整编译并重启 UE。
 2. 打开 `BP_PlayerCharacter`，确认继承的 VitalsComponent 已正确绑定 PlayerState ASC。
-3. 配置默认属性、Damage、Healing 和 Dead State Effect 资源。
-4. 编译 `BP_NXPlayerState`、`BP_PlayerCharacter`、`BP_Rifle`、`BP_Pistol`、HUD 和测试目标蓝图。
-5. 使用 Find References 搜索 `HealthComponent`、`ApplyDamage`、`Heal`、`ResetHealth`、`OnHealthChanged` 和 `OnDeath`。
-6. 蓝图引用全部迁移后，从角色蓝图移除旧 HealthComponent 并重存相关资产。
-7. C++ 和资产二次扫描均无有效引用后，删除 `Health/HealthComponent.h/.cpp`，不保留新旧双写适配。
+3. 在 `DA_Rifle` 和 `DA_Pistol` 中把 Damage Effect Class 配置为 `GE_Damage_Base`。
+4. 创建 `BP_DamageTestTarget`，配置 Default Vitals Effect 和 VitalsComponent 的 Dead State Effect，并替换关卡中直接放置的三个 C++ 测试靶实例。
+5. 编译 `BP_NXPlayerState`、`BP_PlayerCharacter`、`BP_Rifle`、`BP_Pistol`、HUD 和测试目标蓝图。
+6. 使用 Find References 搜索 `HealthComponent`、`ApplyDamage`、`Heal`、`ResetHealth`、`OnHealthChanged` 和 `OnDeath`。
+7. 蓝图引用全部迁移后，从角色蓝图移除旧 HealthComponent 并重存相关资产。
+8. C++ 和资产二次扫描均无有效引用后，删除 `Health/HealthComponent.h/.cpp`，不保留新旧双写适配。
+
+完成情况（2026-07-27）：
+
+- `BP_PlayerCharacter` 已移除旧 HealthComponent；武器 DataAsset、测试目标、PlayerState 和 HUD 已接入 GAS Vitals 链路。
+- HUD 字段已迁移为 `bHasVitalsComponent`，并保留 Core Redirect 供旧序列化数据升级。
+- 关键角色、武器、HUD 和测试目标蓝图已重新编译并保存，无本阶段相关编译错误。
+- C++ 与资产扫描均无有效旧 HealthComponent 引用，旧类已删除。
+- `GASPALSEditor Win64 Development` 完整构建通过；默认关卡命令行冒烟中，玩家与三个测试目标均初始化为 `100/100`。
 
 ## 6. 联机与重生约束
 
@@ -265,13 +278,14 @@ BaseDamage + DamageType + Source/Target Tags
 
 ### 构建与资产
 
-- [ ] UHT、`GASPALSEditor Win64 Development` 编译和链接通过。
-- [ ] 关键 C++、角色蓝图、武器蓝图、HUD 和 GameplayEffect 资产无错误。
-- [ ] 运行时 PlayerCharacter 上只有一套生命值权威。
+- [x] UHT、`GASPALSEditor Win64 Development` 编译和链接通过。
+- [x] 关键 C++、角色蓝图、武器蓝图、HUD 和 GameplayEffect 资产无本阶段相关错误。
+- [x] 运行时 PlayerCharacter 上只有 GAS Vitals 一套生命值权威。
 
 ### 单机功能
 
-- [ ] 玩家和 DamageTestTarget 初始生命值正确，HUD 不再显示 0。
+- [x] 玩家和 DamageTestTarget 在默认关卡中均正确初始化为 `100/100`。
+- [ ] 在 PIE 中人工确认 HUD 初始生命值不再显示 0。
 - [ ] 枪械伤害与 DataAsset 数值一致，未配置 Effect 时给出明确错误。
 - [ ] 治疗不会超过 MaxHealth，死亡后普通治疗不会直接复活。
 - [ ] Health 首次归零时 Dead Tag 和死亡事件各触发一次。
@@ -286,8 +300,8 @@ BaseDamage + DamageType + Source/Target Tags
 
 ### 清理
 
-- [ ] C++、蓝图和资产引用扫描中不再存在有效旧 HealthComponent 调用。
-- [ ] 删除旧类后完整编译、重启编辑器并再次保存关键蓝图。
+- [x] C++、蓝图和资产引用扫描中不再存在有效旧 HealthComponent 调用。
+- [x] 删除旧类后完成完整编译，并重新编译、保存关键蓝图。
 
 ## 9. 开发进度
 
@@ -296,11 +310,11 @@ BaseDamage + DamageType + Source/Target Tags
 | 设计审核 | 已通过首轮范围审核 |
 | 5.1 Tag、AttributeSet 与 PlayerState | C++ 已完成，UHT/编译/链接通过 |
 | 5.2 伤害 Effect 契约 | C++ 已完成，UHT/编译/链接及默认关卡冒烟通过 |
-| 5.3 GameplayEffect 资源接入 | 待开发 |
-| 5.4 现有调用方迁移 | 待开发 |
-| 5.5 蓝图迁移与旧组件删除 | 待开发 |
-| 单机、联机与回归验收 | 待测试 |
+| 5.3 GameplayEffect 资源接入 | 四个 GE 资源已创建并完成首轮配置，默认关卡加载通过 |
+| 5.4 现有调用方迁移 | 已完成，UHT/编译/链接及默认关卡冒烟通过 |
+| 5.5 蓝图迁移与旧组件删除 | 已完成，关键蓝图已重编译并保存，旧类已删除 |
+| 单机、联机与回归验收 | 命令行冒烟通过，待 PIE 交互与联机测试 |
 
 完成本文件验收后，再开始 `GA_LightAttack` 与近战 Sweep。这样近战和枪械从第一天起共用同一条伤害、死亡与状态链，不需要再经历第二次生命值迁移。
 
-设计审核通过后，再同步上层路线图中“阶段 3 使用 HealthComponent 适配”和“阶段 7 才迁移 Attribute”的旧描述。
+上层路线图已同步：阶段 3 直接复用 GAS 伤害入口，原阶段 7 调整为 Poise、抗性和 Buff/Debuff 等高级 Attribute/Effect 扩展。

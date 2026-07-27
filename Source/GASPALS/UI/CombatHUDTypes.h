@@ -60,7 +60,7 @@ struct GASPALS_API FPlayerHUDState
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category="HUD|Player")
-	bool bHasHealthComponent = false;
+	bool bHasVitalsComponent = false;
 
 	UPROPERTY(BlueprintReadOnly, Category="HUD|Player")
 	float Health = 0.0f;
@@ -76,7 +76,7 @@ struct GASPALS_API FPlayerHUDState
 
 	bool operator==(const FPlayerHUDState& Other) const
 	{
-		return bHasHealthComponent == Other.bHasHealthComponent
+		return bHasVitalsComponent == Other.bHasVitalsComponent
 			&& FMath::IsNearlyEqual(Health, Other.Health)
 			&& FMath::IsNearlyEqual(MaxHealth, Other.MaxHealth)
 			&& FMath::IsNearlyEqual(HealthPercent, Other.HealthPercent)

@@ -160,6 +160,51 @@ bool UNXVitalsComponent::IsDead() const
 	return IsBoundToOwnerAvatar() && BoundASC->HasMatchingGameplayTag(NXGameplayTags::Combat_State_Dead);
 }
 
+bool UNXVitalsComponent::RemoveDeadStateEffect()
+{
+	UAbilitySystemComponent* BoundASC = AbilitySystemComponent.Get();
+	if (!IsBoundToOwnerAvatar())
+	{
+		UE_LOG(LogNXVitalsComponent, Warning, TEXT("%s 无法移除死亡状态：VitalsComponent 尚未绑定有效 ASC。"), *GetNameSafe(GetOwner()));
+		return false;
+	}
+
+	if (!BoundASC->IsOwnerActorAuthoritative())
+	{
+		UE_LOG(LogNXVitalsComponent, Warning, TEXT("%s 无法移除死亡状态：该操作只能由服务端执行。"), *GetNameSafe(GetOwner()));
+		return false;
+	}
+
+	if (!IsDead())
+	{
+		DeadStateEffectHandle = FActiveGameplayEffectHandle();
+		return true;
+	}
+
+	// 使用应用死亡 Effect 时保存的精确 Handle，避免误删其他系统授予的状态 Effect。
+	const FActiveGameplayEffectHandle EffectToRemove = DeadStateEffectHandle;
+	if (!EffectToRemove.IsValid())
+	{
+		UE_LOG(LogNXVitalsComponent, Error, TEXT("%s 持有 Combat.State.Dead，但找不到对应的 ActiveEffectHandle。"), *GetNameSafe(GetOwner()));
+		return false;
+	}
+
+	if (!BoundASC->RemoveActiveGameplayEffect(EffectToRemove))
+	{
+		UE_LOG(LogNXVitalsComponent, Error, TEXT("%s 无法移除死亡状态 GameplayEffect。"), *GetNameSafe(GetOwner()));
+		return false;
+	}
+
+	DeadStateEffectHandle = FActiveGameplayEffectHandle();
+	if (IsDead())
+	{
+		UE_LOG(LogNXVitalsComponent, Error, TEXT("%s 的死亡 Effect 已移除，但 Combat.State.Dead 仍由其他 Effect 持有。"), *GetNameSafe(GetOwner()));
+		return false;
+	}
+
+	return true;
+}
+
 void UNXVitalsComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UninitializeFromAbilitySystem();

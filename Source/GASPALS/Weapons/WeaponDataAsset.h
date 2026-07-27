@@ -9,6 +9,7 @@
 
 class UAnimMontage;
 class UCameraShakeBase;
+class UGameplayEffect;
 class USoundBase;
 class UNiagaraSystem;
 
@@ -65,9 +66,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire")
 	EWeaponTraceMode TraceMode = EWeaponTraceMode::MuzzleToCameraAim;
 
-	// 单发基础伤害。暴击、护甲、部位倍率后续在伤害系统里扩展。
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire", meta=(ClampMin="0.0", UIMin="0.0"))
+	// 单发基础伤害；武器只提交原始数值，护甲、抗性和部位倍率统一由 Damage Execution 计算。
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Damage", meta=(ClampMin="0.0", UIMin="0.0"))
 	float Damage = 20.0f;
+
+	/** 本武器应用伤害时使用的 Instant GameplayEffect；当前枪械统一配置 GE_Damage_Base。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Damage")
+	TSubclassOf<UGameplayEffect> DamageEffectClass;
 
 	// 每分钟射速 RPM。实际开火间隔为 60 / FireRate。
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Fire", meta=(ClampMin="1.0", UIMin="1.0", Units="rpm"))

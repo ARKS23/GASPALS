@@ -22,15 +22,18 @@
 - `WeaponPresentationComponent` 的动画、音效、VFX、Tracer、Impact 和后坐表现。
 - `WeaponAnimationProfile + Chooser` 数据驱动动画选择。
 - GASPALS Rifle/Pistol Overlay、手部 IK 与 `NXWeaponAction` Slot。
-- `HealthComponent`、HUD、射击伤害和测试目标。
+- `ANXPlayerState` 持有 ASC，`ANXCharacterBase` 作为 Avatar，并已跑通测试 Ability。
+- Native Gameplay Tags、ActionTag 请求入口和通用 Equipment Actor/Component 契约。
+- GAS Vitals AttributeSet、伤害 Execution、死亡状态、HUD 和测试目标闭环。
 - Gameplay Tags 和 Chooser 模块依赖。
 
 当前限制：
 
 - `ANXRangedWeapon`、`UWeaponDataAsset` 和 `UWeaponComponent` 仍以枪械语义为主。
 - 动画 Cue 固定为 Fire/Reload/Equip/Unequip，不适合持续增加近战动作。
-- 尚未启用 `GameplayAbilities`，没有 ASC、Ability、AttributeSet 或 GameplayEffect。
-- 生命值当前由 `HealthComponent` 维护，不能同时再建立第二套 GAS Health 权威数据。
+- 当前只有测试 Ability，近战动作和枪械 Fire/Reload 尚未迁移为 GameplayAbility。
+- 体力已有 Attribute，但消耗、恢复和 HUD 尚未形成玩法闭环。
+- 重生和联机权威、预测、复制尚未验收。
 
 枪械 Fire 动画美术打磨暂缓，但现有枪械链必须作为后续回归基线保留。
 
@@ -44,7 +47,7 @@
 6. **Ability 不硬编码动画**：Ability 提供动作语义，Profile/Chooser 解析具体资源。
 7. **玩法与表现分离**：Ability/武器决定结果，表现层消费不可变 Cue，不反向决定 Gameplay。
 8. **组件数量受控**：动作生命周期由 ASC 管理，角色侧不再新增通用战斗组件；装备与表现保持独立边界，武器差异放在 Actor 和数据中。
-9. **渐进式 GAS**：先接近战动作和体力，再迁移伤害、枪械和联机表现。
+9. **渐进式 GAS**：生命、伤害和死亡已先迁移；后续按近战动作、体力消费、枪械 Ability 和联机表现逐步推进。
 
 ## 4. 目标结构
 
@@ -52,13 +55,14 @@
 ANXPlayerState
 ├── AbilitySystemComponent
 ├── Startup Ability Specs
-└── AttributeSets                // 后续阶段接入
+└── VitalsAttributeSet           // Health/Stamina 的唯一权威
 
 ANXCharacterBase                 // 玩家 ASC 的 AvatarActor 与 ActionTag 请求入口
-├── EquipmentComponent           // 由现有 WeaponComponent 渐进演化
+├── VitalsComponent              // Attribute/Dead Tag 的观察与蓝图事件桥接
+├── NXEquipmentComponent         // 通用装备状态与生命周期
+├── WeaponComponent              // 枪械兼容 API，不保存第二份装备状态
 ├── CombatPresentationComponent  // 由现有 WeaponPresentationComponent 渐进演化
-├── PlayerRecoilComponent        // 枪械专用
-└── HealthComponent              // GAS Health 迁移前保留
+└── PlayerRecoilComponent        // 枪械专用
 
 CombatComponent                  // 过渡期枪械适配，调用方迁移完成后评估移除
 
@@ -116,9 +120,9 @@ Animation.Stance.Rifle
 GAS 负责：
 
 - Ability 激活条件、Block/Cancel Tags 和动作互斥。
-- 体力消耗、冷却和状态效果。
+- Health/Stamina Attribute、伤害、治疗、死亡 Tag、体力消耗、冷却和状态效果。
 - 轻攻击、重攻击、格挡、招架、闪避等动作生命周期。
-- 后续的伤害、削韧、Buff/Debuff 和联机预测。
+- 后续的削韧、抗性、Buff/Debuff 和联机预测。
 
 现有系统继续负责：
 
@@ -127,20 +131,21 @@ GAS 负责：
 - DataAsset、Chooser 和 Profile 的资源解析。
 - GASPALS Overlay、角色 AnimBP 和表现挂载点。
 
-初期不要把弹匣弹药放进 AttributeSet。Health 在完成正式迁移前继续由 `HealthComponent` 单独维护。
+弹匣弹药继续由 Weapon Actor 管理，不进入 AttributeSet。Health 与 Stamina 已由 PlayerState ASC 中的 VitalsAttributeSet 唯一维护，角色侧不再保留旧 HealthComponent。
 
 ## 7. 开发阶段
 
 | 阶段 | 目标 | 核心验收 | 状态 |
 |---|---|---|---|
 | 0 | 冻结并记录枪械基线 | 射击、换弹、HUD、Overlay 可回归 | 已具备 |
-| 1 | [GAS 基础设施](./phase_01_gas_foundation.md) | ASC 初始化、Tag 激活、Ability 授予与取消正常 | 待开发 |
-| 2 | [通用动作与装备契约](../05_tasks/GAS/phase_02_combat_action_equipment_contract.md) | 同一入口可识别近战/枪械装备，不复制两套装备状态 | 待开发 |
+| 1 | [GAS 基础设施](./phase_01_gas_foundation.md) | ASC 初始化、Tag 激活、Ability 授予与取消正常 | 已完成 |
+| 2 | [通用动作与装备契约](../05_tasks/GAS/phase_02_combat_action_equipment_contract.md) | 同一入口可识别近战/枪械装备，不复制两套装备状态 | 已完成 |
+| 2.5 | [Vitals、伤害与死亡基础](../05_tasks/GAS/gas_vitals_damage_death_foundation.md) | Health/Stamina、伤害、死亡、HUD 统一进入 GAS | 清理完成，待交互/联机验收 |
 | 3 | 单手剑最小闭环 | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 待开发 |
 | 4 | 魂类基础状态 | 体力、重攻击、闪避、格挡、招架、硬直 | 待开发 |
 | 5 | 连击与动画数据驱动 | 输入缓存、取消窗口、Combo 分支、Chooser/Profile 换资源 | 待开发 |
 | 6 | 枪械 GAS 适配 | Fire/Reload Ability 包装现有 ANXRangedWeapon，枪械行为不回归 | 待开发 |
-| 7 | Attribute/Effect 迁移 | Health、Damage、Poise 统一进入 AttributeSet/GameplayEffect | 待开发 |
+| 7 | 高级 Attribute/Effect | Poise、抗性、Buff/Debuff 进入 AttributeSet/GameplayEffect | 待开发 |
 | 8 | 联机与 GameplayCue | 权威、预测、复制和远端表现验证 | 延后 |
 
 ### 阶段 1：GAS 基础设施
@@ -169,12 +174,12 @@ GAS 负责：
 - 创建 Light Attack Ability，使用数据解析后的 Montage。
 - 使用 `AnimNotifyState` 打开和关闭命中窗口。
 - 武器在窗口内对起止 Socket 做 Sweep，并对同一目标去重。
-- 伤害先通过适配器写入现有 `HealthComponent`。
+- 命中后通过统一 GAS 伤害入口应用 Damage GameplayEffect。
 - 动画中断、死亡或卸装必须关闭命中窗口并清理状态。
 
 ### 阶段 4-5：魂类战斗扩展
 
-- 体力成为第一项 GAS Attribute；攻击、格挡和闪避通过 GameplayEffect 消耗。
+- 使用现有 Stamina Attribute，让攻击、格挡和闪避通过 GameplayEffect 消耗与恢复。
 - 加入重攻击、蓄力、闪避无敌帧、格挡减伤、招架窗口和削韧。
 - 增加输入缓存、Combo 窗口和动作取消规则。
 - 锁定系统和攻击朝向单独设计，不塞进武器 Actor。
@@ -203,7 +208,7 @@ GAS 负责：
 - 每个攻击窗口维护已命中 Actor 集合，默认一次窗口只命中同一目标一次。
 - Sweep 只负责几何命中；Ability/GameplayEffect 负责伤害、体力、削韧和状态。
 - Anim Notify 只发送窗口事件，不直接扣血或决定攻击是否合法。
-- `HealthComponent` 与 GAS Health Attribute 不得同时写生命值。
+- Health 只允许通过 GAS Attribute/GameplayEffect 修改，禁止再增加第二份可写生命值状态。
 
 ## 10. 后续文档规范
 

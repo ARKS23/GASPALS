@@ -199,7 +199,7 @@ protected:
 	virtual bool GetMuzzleTransform(FTransform& OutMuzzleTransform) const;
 	virtual FVector ApplySpreadToDirection(const FVector& TraceDirection) const;
 	virtual FVector GetMuzzleLocation() const;
-	virtual AActor* GetDamageCauser() const;
+	virtual AActor* GetDamageSourceActor() const;
 
 	// 给蓝图表现层的扩展点。C++ 只负责逻辑，动画、VFX、复杂音效可以在子蓝图里处理。
 	UFUNCTION(BlueprintImplementableEvent, Category="Weapon|Events")

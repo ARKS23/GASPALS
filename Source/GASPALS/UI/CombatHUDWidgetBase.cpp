@@ -1,12 +1,12 @@
 #include "CombatHUDWidgetBase.h"
 
+#include "../AbilitySystem/Vitals/NXVitalsComponent.h"
 #include "../Combat/CombatComponent.h"
-#include "GameFramework/Pawn.h"
-#include "../Health/HealthComponent.h"
 #include "../Weapons/NXRangedWeapon.h"
 #include "../Weapons/WeaponComponent.h"
 #include "../Weapons/WeaponDataAsset.h"
 #include "../Weapons/WeaponPresentationComponent.h"
+#include "GameFramework/Pawn.h"
 
 void UCombatHUDWidgetBase::SetObservedPawn(APawn* NewPawn)
 {
@@ -57,17 +57,16 @@ FWeaponHUDState UCombatHUDWidgetBase::GetWeaponHUDState() const
 FPlayerHUDState UCombatHUDWidgetBase::GetPlayerHUDState() const
 {
 	FPlayerHUDState State;
-	if (!IsValid(HealthComponent.Get()))
+	if (!IsValid(VitalsComponent.Get()))
 	{
 		return State;
 	}
 
-	State.bHasHealthComponent = true;
-	State.Health = FMath::Max(0.0f, HealthComponent->GetHealth());
-	State.MaxHealth = FMath::Max(0.0f, HealthComponent->GetMaxHealth());
-	State.HealthPercent = FMath::Clamp(HealthComponent->GetHealthPercent(), 0.0f, 1.0f);
-	// OnHealthChanged 在 HealthComponent 写入死亡标记前广播，0 血时需要在快照中立即反映死亡。
-	State.bIsDead = HealthComponent->IsDead() || State.Health <= 0.0f;
+	State.bHasVitalsComponent = true;
+	State.Health = FMath::Max(0.0f, VitalsComponent->GetHealth());
+	State.MaxHealth = FMath::Max(0.0f, VitalsComponent->GetMaxHealth());
+	State.HealthPercent = FMath::Clamp(VitalsComponent->GetHealthPercent(), 0.0f, 1.0f);
+	State.bIsDead = VitalsComponent->IsDead();
 
 	return State;
 }
@@ -119,7 +118,7 @@ void UCombatHUDWidgetBase::BindObservedPawn()
 	CombatComponent = ObservedPawn->FindComponentByClass<UCombatComponent>();
 	WeaponComponent = ObservedPawn->FindComponentByClass<UWeaponComponent>();
 	WeaponPresentationComponent = ObservedPawn->FindComponentByClass<UWeaponPresentationComponent>();
-	HealthComponent = ObservedPawn->FindComponentByClass<UHealthComponent>();
+	VitalsComponent = ObservedPawn->FindComponentByClass<UNXVitalsComponent>();
 
 	if (IsValid(CombatComponent.Get()))
 	{
@@ -142,12 +141,11 @@ void UCombatHUDWidgetBase::BindObservedPawn()
 			this, &UCombatHUDWidgetBase::HandleHitConfirmed);
 	}
 
-	if (IsValid(HealthComponent.Get()))
+	if (IsValid(VitalsComponent.Get()))
 	{
-		HealthComponent->OnHealthChanged.AddUniqueDynamic(
-			this, &UCombatHUDWidgetBase::HandleHealthChanged);
-		HealthComponent->OnDeath.AddUniqueDynamic(
-			this, &UCombatHUDWidgetBase::HandleDeath);
+		VitalsComponent->OnHealthChanged.AddUniqueDynamic(this, &UCombatHUDWidgetBase::HandleHealthChanged);
+		VitalsComponent->OnMaxHealthChanged.AddUniqueDynamic(this, &UCombatHUDWidgetBase::HandleMaxHealthChanged);
+		VitalsComponent->OnDeathStateChanged.AddUniqueDynamic(this, &UCombatHUDWidgetBase::HandleDeathStateChanged);
 	}
 }
 
@@ -175,18 +173,17 @@ void UCombatHUDWidgetBase::UnbindObservedPawn()
 			this, &UCombatHUDWidgetBase::HandleHitConfirmed);
 	}
 
-	if (IsValid(HealthComponent.Get()))
+	if (IsValid(VitalsComponent.Get()))
 	{
-		HealthComponent->OnHealthChanged.RemoveDynamic(
-			this, &UCombatHUDWidgetBase::HandleHealthChanged);
-		HealthComponent->OnDeath.RemoveDynamic(
-			this, &UCombatHUDWidgetBase::HandleDeath);
+		VitalsComponent->OnHealthChanged.RemoveDynamic(this, &UCombatHUDWidgetBase::HandleHealthChanged);
+		VitalsComponent->OnMaxHealthChanged.RemoveDynamic(this, &UCombatHUDWidgetBase::HandleMaxHealthChanged);
+		VitalsComponent->OnDeathStateChanged.RemoveDynamic(this, &UCombatHUDWidgetBase::HandleDeathStateChanged);
 	}
 
 	CombatComponent = nullptr;
 	WeaponComponent = nullptr;
 	WeaponPresentationComponent = nullptr;
-	HealthComponent = nullptr;
+	VitalsComponent = nullptr;
 	bHasWeaponState = false;
 	bHasPlayerState = false;
 	bHasCrosshairState = false;
@@ -320,20 +317,32 @@ void UCombatHUDWidgetBase::HandleCombatEnabledChanged(
 }
 
 void UCombatHUDWidgetBase::HandleHealthChanged(
-	UHealthComponent* InHealthComponent,
-	float NewHealth,
-	float Delta,
-	AActor* SourceActor)
+	UNXVitalsComponent* InVitalsComponent,
+	float /*OldHealth*/,
+	float /*NewHealth*/,
+	AActor* /*EffectInstigator*/,
+	AActor* /*EffectCauser*/)
 {
-	if (InHealthComponent == HealthComponent.Get())
+	if (InVitalsComponent == VitalsComponent.Get())
 	{
 		PushPlayerHUDState();
 	}
 }
 
-void UCombatHUDWidgetBase::HandleDeath(UHealthComponent* InHealthComponent, AActor* KillerActor)
+void UCombatHUDWidgetBase::HandleMaxHealthChanged(
+	UNXVitalsComponent* InVitalsComponent,
+	float /*OldMaxHealth*/,
+	float /*NewMaxHealth*/)
 {
-	if (InHealthComponent == HealthComponent.Get())
+	if (InVitalsComponent == VitalsComponent.Get())
+	{
+		PushPlayerHUDState();
+	}
+}
+
+void UCombatHUDWidgetBase::HandleDeathStateChanged(UNXVitalsComponent* InVitalsComponent, bool /*bIsDead*/)
+{
+	if (InVitalsComponent == VitalsComponent.Get())
 	{
 		PushPlayerHUDState();
 	}
