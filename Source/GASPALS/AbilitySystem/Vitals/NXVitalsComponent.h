@@ -28,6 +28,20 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
 	float, OldMaxHealth,
 	float, NewMaxHealth);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(
+	FOnNXStaminaChangedSignature,
+	UNXVitalsComponent*, VitalsComponent,
+	float, OldStamina,
+	float, NewStamina,
+	AActor*, EffectInstigator,
+	AActor*, EffectCauser);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
+	FOnNXMaxStaminaChangedSignature,
+	UNXVitalsComponent*, VitalsComponent,
+	float, OldMaxStamina,
+	float, NewMaxStamina);
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnNXDeathStateChangedSignature,
 	UNXVitalsComponent*, VitalsComponent,
@@ -96,6 +110,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="NexAur|Vitals|Events")
 	FOnNXMaxHealthChangedSignature OnMaxHealthChanged;
 
+	UPROPERTY(BlueprintAssignable, Category="NexAur|Vitals|Events")
+	FOnNXStaminaChangedSignature OnStaminaChanged;
+
+	UPROPERTY(BlueprintAssignable, Category="NexAur|Vitals|Events")
+	FOnNXMaxStaminaChangedSignature OnMaxStaminaChanged;
+
 	/** Dead Tag 加入或移除时广播；死亡状态的唯一权威仍然是 ASC Tag。 */
 	UPROPERTY(BlueprintAssignable, Category="NexAur|Vitals|Events")
 	FOnNXDeathStateChangedSignature OnDeathStateChanged;
@@ -117,6 +137,8 @@ private:
 
 	void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleMaxHealthChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleStaminaChanged(const FOnAttributeChangeData& ChangeData);
+	void HandleMaxStaminaChanged(const FOnAttributeChangeData& ChangeData);
 	void HandleDeadTagChanged(const FGameplayTag Tag, int32 NewCount);
 	void HandleOutOfHealth(
 		AActor* EffectInstigator,
@@ -131,6 +153,8 @@ private:
 
 	FDelegateHandle HealthChangedDelegateHandle;
 	FDelegateHandle MaxHealthChangedDelegateHandle;
+	FDelegateHandle StaminaChangedDelegateHandle;
+	FDelegateHandle MaxStaminaChangedDelegateHandle;
 	FDelegateHandle DeadTagChangedDelegateHandle;
 	FDelegateHandle OutOfHealthDelegateHandle;
 	FActiveGameplayEffectHandle DeadStateEffectHandle;

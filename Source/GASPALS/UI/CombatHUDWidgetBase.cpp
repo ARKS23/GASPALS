@@ -6,7 +6,13 @@
 #include "../Weapons/WeaponComponent.h"
 #include "../Weapons/WeaponDataAsset.h"
 #include "../Weapons/WeaponPresentationComponent.h"
+#include "Widgets/NXPlayerStatusWidgetBase.h"
 #include "GameFramework/Pawn.h"
+
+namespace
+{
+	const FName PlayerStatusWidgetName(TEXT("PlayerStatusWidget"));
+}
 
 void UCombatHUDWidgetBase::SetObservedPawn(APawn* NewPawn)
 {
@@ -66,6 +72,9 @@ FPlayerHUDState UCombatHUDWidgetBase::GetPlayerHUDState() const
 	State.Health = FMath::Max(0.0f, VitalsComponent->GetHealth());
 	State.MaxHealth = FMath::Max(0.0f, VitalsComponent->GetMaxHealth());
 	State.HealthPercent = FMath::Clamp(VitalsComponent->GetHealthPercent(), 0.0f, 1.0f);
+	State.Stamina = FMath::Max(0.0f, VitalsComponent->GetStamina());
+	State.MaxStamina = FMath::Max(0.0f, VitalsComponent->GetMaxStamina());
+	State.StaminaPercent = FMath::Clamp(VitalsComponent->GetStaminaPercent(), 0.0f, 1.0f);
 	State.bIsDead = VitalsComponent->IsDead();
 
 	return State;
@@ -99,11 +108,18 @@ FCrosshairHUDState UCombatHUDWidgetBase::GetCrosshairHUDState() const
 	return State;
 }
 
+void UCombatHUDWidgetBase::NativeConstruct()
+{
+	Super::NativeConstruct();
+	ResolvePlayerStatusWidget();
+}
+
 void UCombatHUDWidgetBase::NativeDestruct()
 {
 	// NativeDestruct 只清理订阅，不再触发蓝图表现，避免销毁期间访问已经释放的子 Widget。
 	UnbindObservedPawn();
 	ObservedPawn = nullptr;
+	NativePlayerStatusWidget = nullptr;
 
 	Super::NativeDestruct();
 }
@@ -145,6 +161,8 @@ void UCombatHUDWidgetBase::BindObservedPawn()
 	{
 		VitalsComponent->OnHealthChanged.AddUniqueDynamic(this, &UCombatHUDWidgetBase::HandleHealthChanged);
 		VitalsComponent->OnMaxHealthChanged.AddUniqueDynamic(this, &UCombatHUDWidgetBase::HandleMaxHealthChanged);
+		VitalsComponent->OnStaminaChanged.AddUniqueDynamic(this, &UCombatHUDWidgetBase::HandleStaminaChanged);
+		VitalsComponent->OnMaxStaminaChanged.AddUniqueDynamic(this, &UCombatHUDWidgetBase::HandleMaxStaminaChanged);
 		VitalsComponent->OnDeathStateChanged.AddUniqueDynamic(this, &UCombatHUDWidgetBase::HandleDeathStateChanged);
 	}
 }
@@ -177,6 +195,8 @@ void UCombatHUDWidgetBase::UnbindObservedPawn()
 	{
 		VitalsComponent->OnHealthChanged.RemoveDynamic(this, &UCombatHUDWidgetBase::HandleHealthChanged);
 		VitalsComponent->OnMaxHealthChanged.RemoveDynamic(this, &UCombatHUDWidgetBase::HandleMaxHealthChanged);
+		VitalsComponent->OnStaminaChanged.RemoveDynamic(this, &UCombatHUDWidgetBase::HandleStaminaChanged);
+		VitalsComponent->OnMaxStaminaChanged.RemoveDynamic(this, &UCombatHUDWidgetBase::HandleMaxStaminaChanged);
 		VitalsComponent->OnDeathStateChanged.RemoveDynamic(this, &UCombatHUDWidgetBase::HandleDeathStateChanged);
 	}
 
@@ -215,6 +235,12 @@ void UCombatHUDWidgetBase::BindWeapon(ANXRangedWeapon* NewWeapon)
 	}
 }
 
+void UCombatHUDWidgetBase::ResolvePlayerStatusWidget()
+{
+	// 迁移期不声明同名 BindWidget，避免改变旧 WBP 中 PlayerStatusWidget 变量的具体类型并破坏已有连线。
+	NativePlayerStatusWidget = Cast<UNXPlayerStatusWidgetBase>(GetWidgetFromName(PlayerStatusWidgetName));
+}
+
 void UCombatHUDWidgetBase::PushWeaponHUDState(bool bForce)
 {
 	const FWeaponHUDState NewState = GetWeaponHUDState();
@@ -238,6 +264,14 @@ void UCombatHUDWidgetBase::PushPlayerHUDState(bool bForce)
 
 	LastPlayerState = NewState;
 	bHasPlayerState = true;
+
+	// 子 Widget 完成原生基类接入后直接走 C++；迁移前继续调用旧蓝图分发事件。
+	if (IsValid(NativePlayerStatusWidget.Get()))
+	{
+		NativePlayerStatusWidget->ApplyPlayerHUDState(NewState);
+		return;
+	}
+
 	ReceivePlayerHUDState(NewState);
 }
 
@@ -333,6 +367,30 @@ void UCombatHUDWidgetBase::HandleMaxHealthChanged(
 	UNXVitalsComponent* InVitalsComponent,
 	float /*OldMaxHealth*/,
 	float /*NewMaxHealth*/)
+{
+	if (InVitalsComponent == VitalsComponent.Get())
+	{
+		PushPlayerHUDState();
+	}
+}
+
+void UCombatHUDWidgetBase::HandleStaminaChanged(
+	UNXVitalsComponent* InVitalsComponent,
+	float /*OldStamina*/,
+	float /*NewStamina*/,
+	AActor* /*EffectInstigator*/,
+	AActor* /*EffectCauser*/)
+{
+	if (InVitalsComponent == VitalsComponent.Get())
+	{
+		PushPlayerHUDState();
+	}
+}
+
+void UCombatHUDWidgetBase::HandleMaxStaminaChanged(
+	UNXVitalsComponent* InVitalsComponent,
+	float /*OldMaxStamina*/,
+	float /*NewMaxStamina*/)
 {
 	if (InVitalsComponent == VitalsComponent.Get())
 	{

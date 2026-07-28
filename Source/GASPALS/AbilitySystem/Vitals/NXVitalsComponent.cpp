@@ -52,6 +52,10 @@ bool UNXVitalsComponent::InitializeWithAbilitySystem(UAbilitySystemComponent* In
 		UNXVitalsAttributeSet::GetHealthAttribute()).AddUObject(this, &UNXVitalsComponent::HandleHealthChanged);
 	MaxHealthChangedDelegateHandle = InAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
 		UNXVitalsAttributeSet::GetMaxHealthAttribute()).AddUObject(this, &UNXVitalsComponent::HandleMaxHealthChanged);
+	StaminaChangedDelegateHandle = InAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		UNXVitalsAttributeSet::GetStaminaAttribute()).AddUObject(this, &UNXVitalsComponent::HandleStaminaChanged);
+	MaxStaminaChangedDelegateHandle = InAbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(
+		UNXVitalsAttributeSet::GetMaxStaminaAttribute()).AddUObject(this, &UNXVitalsComponent::HandleMaxStaminaChanged);
 	DeadTagChangedDelegateHandle = InAbilitySystemComponent->RegisterGameplayTagEvent(
 		NXGameplayTags::Combat_State_Dead,
 		EGameplayTagEventType::NewOrRemoved).AddUObject(this, &UNXVitalsComponent::HandleDeadTagChanged);
@@ -78,6 +82,16 @@ void UNXVitalsComponent::UninitializeFromAbilitySystem()
 			BoundASC->GetGameplayAttributeValueChangeDelegate(UNXVitalsAttributeSet::GetMaxHealthAttribute()).Remove(MaxHealthChangedDelegateHandle);
 		}
 
+		if (StaminaChangedDelegateHandle.IsValid())
+		{
+			BoundASC->GetGameplayAttributeValueChangeDelegate(UNXVitalsAttributeSet::GetStaminaAttribute()).Remove(StaminaChangedDelegateHandle);
+		}
+
+		if (MaxStaminaChangedDelegateHandle.IsValid())
+		{
+			BoundASC->GetGameplayAttributeValueChangeDelegate(UNXVitalsAttributeSet::GetMaxStaminaAttribute()).Remove(MaxStaminaChangedDelegateHandle);
+		}
+
 		if (DeadTagChangedDelegateHandle.IsValid())
 		{
 			BoundASC->UnregisterGameplayTagEvent(
@@ -97,6 +111,8 @@ void UNXVitalsComponent::UninitializeFromAbilitySystem()
 
 	HealthChangedDelegateHandle.Reset();
 	MaxHealthChangedDelegateHandle.Reset();
+	StaminaChangedDelegateHandle.Reset();
+	MaxStaminaChangedDelegateHandle.Reset();
 	DeadTagChangedDelegateHandle.Reset();
 	OutOfHealthDelegateHandle.Reset();
 	DeadStateEffectHandle = FActiveGameplayEffectHandle();
@@ -239,6 +255,36 @@ void UNXVitalsComponent::HandleMaxHealthChanged(const FOnAttributeChangeData& Ch
 	}
 
 	OnMaxHealthChanged.Broadcast(this, ChangeData.OldValue, ChangeData.NewValue);
+}
+
+void UNXVitalsComponent::HandleStaminaChanged(const FOnAttributeChangeData& ChangeData)
+{
+	if (!IsBoundToOwnerAvatar())
+	{
+		return;
+	}
+
+	AActor* EffectInstigator = nullptr;
+	AActor* EffectCauser = nullptr;
+	if (ChangeData.GEModData)
+	{
+		const FGameplayEffectContextHandle& EffectContext = ChangeData.GEModData->EffectSpec.GetEffectContext();
+		EffectInstigator = EffectContext.GetOriginalInstigator();
+		EffectCauser = EffectContext.GetEffectCauser();
+	}
+
+	// 精力仍由 ASC 唯一保存；组件只把 GAS 原生变化转换成项目级事件。
+	OnStaminaChanged.Broadcast(this, ChangeData.OldValue, ChangeData.NewValue, EffectInstigator, EffectCauser);
+}
+
+void UNXVitalsComponent::HandleMaxStaminaChanged(const FOnAttributeChangeData& ChangeData)
+{
+	if (!IsBoundToOwnerAvatar())
+	{
+		return;
+	}
+
+	OnMaxStaminaChanged.Broadcast(this, ChangeData.OldValue, ChangeData.NewValue);
 }
 
 void UNXVitalsComponent::HandleDeadTagChanged(const FGameplayTag /*Tag*/, int32 NewCount)

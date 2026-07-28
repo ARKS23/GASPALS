@@ -10,6 +10,7 @@
 class APawn;
 class ANXRangedWeapon;
 class UCombatComponent;
+class UNXPlayerStatusWidgetBase;
 class UNXVitalsComponent;
 class UWeaponComponent;
 class UWeaponPresentationComponent;
@@ -48,6 +49,7 @@ public:
 	FCrosshairHUDState GetCrosshairHUDState() const;
 
 protected:
+	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
 	// 派生 WBP 只消费状态并更新子 Widget，不在这里重新查找 Gameplay Component。
@@ -82,6 +84,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ANXRangedWeapon> BoundWeapon;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UNXPlayerStatusWidgetBase> NativePlayerStatusWidget;
+
 	FWeaponHUDState LastWeaponState;
 	FPlayerHUDState LastPlayerState;
 	FCrosshairHUDState LastCrosshairState;
@@ -92,6 +97,7 @@ private:
 	void BindObservedPawn();
 	void UnbindObservedPawn();
 	void BindWeapon(ANXRangedWeapon* NewWeapon);
+	void ResolvePlayerStatusWidget();
 	void PushWeaponHUDState(bool bForce = false);
 	void PushPlayerHUDState(bool bForce = false);
 	void PushCrosshairHUDState(bool bForce = false);
@@ -130,6 +136,17 @@ private:
 
 	UFUNCTION()
 	void HandleMaxHealthChanged(UNXVitalsComponent* InVitalsComponent, float OldMaxHealth, float NewMaxHealth);
+
+	UFUNCTION()
+	void HandleStaminaChanged(
+		UNXVitalsComponent* InVitalsComponent,
+		float OldStamina,
+		float NewStamina,
+		AActor* EffectInstigator,
+		AActor* EffectCauser);
+
+	UFUNCTION()
+	void HandleMaxStaminaChanged(UNXVitalsComponent* InVitalsComponent, float OldMaxStamina, float NewMaxStamina);
 
 	UFUNCTION()
 	void HandleDeathStateChanged(UNXVitalsComponent* InVitalsComponent, bool bIsDead);

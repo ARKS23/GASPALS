@@ -72,6 +72,15 @@ struct GASPALS_API FPlayerHUDState
 	float HealthPercent = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category="HUD|Player")
+	float Stamina = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category="HUD|Player")
+	float MaxStamina = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category="HUD|Player")
+	float StaminaPercent = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category="HUD|Player")
 	bool bIsDead = false;
 
 	bool operator==(const FPlayerHUDState& Other) const
@@ -80,6 +89,9 @@ struct GASPALS_API FPlayerHUDState
 			&& FMath::IsNearlyEqual(Health, Other.Health)
 			&& FMath::IsNearlyEqual(MaxHealth, Other.MaxHealth)
 			&& FMath::IsNearlyEqual(HealthPercent, Other.HealthPercent)
+			&& FMath::IsNearlyEqual(Stamina, Other.Stamina)
+			&& FMath::IsNearlyEqual(MaxStamina, Other.MaxStamina)
+			&& FMath::IsNearlyEqual(StaminaPercent, Other.StaminaPercent)
 			&& bIsDead == Other.bIsDead;
 	}
 
