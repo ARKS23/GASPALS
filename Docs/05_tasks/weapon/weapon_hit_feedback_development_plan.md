@@ -285,7 +285,7 @@ Source/GASPALS/Weapons/WeaponPresentationComponent.cpp
 - 同一次射击包含多条射线时只广播一次，任意击杀均让 Kill Marker 优先。
 - 表现组件只广播事件，不直接创建或持有 Widget。
 
-Hit Marker 的蓝图接入并入步骤 5，不单独创建临时 HUD。`WBP_HitMarker` 通过 `PlayHitConfirmation` 处理 Damage/Kill 分支，并由 `HideHitMarker` 结束本次表现；连续命中会重置同名 Timer，不排队累积。
+Hit Marker 的蓝图接入并入步骤 5，不单独创建临时 HUD。该早期版本曾由 `WBP_HitMarker` 处理 Damage/Kill 分支和 Timer；现已在 [Combat HUD 剩余原生化迁移](../UI/native_combat_hud_remaining_migration.md#34-迁移-hitmarker) 的 3.4 中迁入 `UNXHitMarkerWidgetBase`，WBP 只保留 Designer 和可选表现事件。
 
 ### 步骤 5：补齐基础 HUD
 
@@ -361,7 +361,7 @@ CanvasPanel_Root
 
 - `WBP_CombatHUD` 只实现 C++ 推送事件并把状态传给子 Widget，不自行查找 Gameplay Component。
 - `WBP_Crosshair` 显示固定准心并响应瞄准/战斗可用状态；动态扩散暂缓。
-- `WBP_HitMarker` 显示普通伤害与击杀反馈，分别使用白色/红色和不同缩放，Timer 到期后隐藏。
+- `UNXHitMarkerWidgetBase` 管理普通伤害与击杀反馈的颜色、缩放、Timer 和连续命中重置；`WBP_HitMarker` 只负责图片资源与可选动画。
 - `WBP_WeaponStatus` 显示 `DisplayName`、`FireMode`、弹匣/备用弹药和换弹状态。
 - `WBP_PlayerStatus` 显示当前/最大生命值；护甲、体力及 PlayerState 数据后续接入。
 - 5 个 WBP 的空 `Event Tick` 均已移除，不使用每帧 Property Binding。

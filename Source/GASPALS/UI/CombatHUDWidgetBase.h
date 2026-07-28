@@ -10,14 +10,18 @@
 class APawn;
 class ANXRangedWeapon;
 class UCombatComponent;
+class UNXCrosshairWidgetBase;
+class UNXHitMarkerWidgetBase;
 class UNXPlayerStatusWidgetBase;
+class UNXWeaponStatusWidgetBase;
 class UNXVitalsComponent;
 class UWeaponComponent;
 class UWeaponPresentationComponent;
 
 /**
  * Combat HUD 的 C++ 数据协调层。
- * 该类负责订阅 Gameplay 事件并向蓝图推送只读快照，不定义任何具体 UMG 控件或布局。
+ * 该类负责订阅 Gameplay 事件、构造只读快照，并直接分发给四个原生子 Widget。
+ * 根类只声明子 Widget 契约，不定义具体视觉控件或布局。
  */
 UCLASS(Abstract, Blueprintable)
 class GASPALS_API UCombatHUDWidgetBase : public UUserWidget
@@ -32,7 +36,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="HUD|Setup")
 	void ClearObservedPawn();
 
-	// 主动重发全部当前状态，用于蓝图重建子控件后的同步。
+	// 主动重发全部当前状态，用于初次绑定或需要强制同步子控件的场景。
 	UFUNCTION(BlueprintCallable, Category="HUD|State")
 	void RefreshAllHUDStates();
 
@@ -49,21 +53,7 @@ public:
 	FCrosshairHUDState GetCrosshairHUDState() const;
 
 protected:
-	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
-
-	// 派生 WBP 只消费状态并更新子 Widget，不在这里重新查找 Gameplay Component。
-	UFUNCTION(BlueprintImplementableEvent, Category="HUD|Presentation")
-	void ReceiveWeaponHUDState(const FWeaponHUDState& State);
-
-	UFUNCTION(BlueprintImplementableEvent, Category="HUD|Presentation")
-	void ReceivePlayerHUDState(const FPlayerHUDState& State);
-
-	UFUNCTION(BlueprintImplementableEvent, Category="HUD|Presentation")
-	void ReceiveCrosshairHUDState(const FCrosshairHUDState& State);
-
-	UFUNCTION(BlueprintImplementableEvent, Category="HUD|Presentation")
-	void ReceiveHitConfirmation(const FWeaponHitConfirmation& Confirmation);
 
 private:
 	UPROPERTY(Transient)
@@ -84,8 +74,21 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<ANXRangedWeapon> BoundWeapon;
 
-	UPROPERTY(Transient)
-	TObjectPtr<UNXPlayerStatusWidgetBase> NativePlayerStatusWidget;
+	/** 根 WBP 必须提供同名 PlayerStatus 子 Widget，状态由 C++ 直接分发。 */
+	UPROPERTY(Transient, meta=(BindWidget))
+	TObjectPtr<UNXPlayerStatusWidgetBase> PlayerStatusWidget;
+
+	/** 根 WBP 必须提供同名 WeaponStatus 子 Widget，状态由 C++ 直接分发。 */
+	UPROPERTY(Transient, meta=(BindWidget))
+	TObjectPtr<UNXWeaponStatusWidgetBase> WeaponStatusWidget;
+
+	/** 根 WBP 必须提供同名 Crosshair 子 Widget，状态由 C++ 直接分发。 */
+	UPROPERTY(Transient, meta=(BindWidget))
+	TObjectPtr<UNXCrosshairWidgetBase> CrosshairWidget;
+
+	/** 根 WBP 必须提供同名 HitMarker 子 Widget，瞬时反馈由 C++ 直接分发。 */
+	UPROPERTY(Transient, meta=(BindWidget))
+	TObjectPtr<UNXHitMarkerWidgetBase> HitMarkerWidget;
 
 	FWeaponHUDState LastWeaponState;
 	FPlayerHUDState LastPlayerState;
@@ -95,9 +98,8 @@ private:
 	bool bHasCrosshairState = false;
 
 	void BindObservedPawn();
-	void UnbindObservedPawn();
+	void UnbindObservedPawn(bool bResetTransientPresentation = true);
 	void BindWeapon(ANXRangedWeapon* NewWeapon);
-	void ResolvePlayerStatusWidget();
 	void PushWeaponHUDState(bool bForce = false);
 	void PushPlayerHUDState(bool bForce = false);
 	void PushCrosshairHUDState(bool bForce = false);

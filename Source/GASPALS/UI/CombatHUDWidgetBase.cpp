@@ -6,13 +6,11 @@
 #include "../Weapons/WeaponComponent.h"
 #include "../Weapons/WeaponDataAsset.h"
 #include "../Weapons/WeaponPresentationComponent.h"
+#include "Widgets/NXCrosshairWidgetBase.h"
+#include "Widgets/NXHitMarkerWidgetBase.h"
 #include "Widgets/NXPlayerStatusWidgetBase.h"
+#include "Widgets/NXWeaponStatusWidgetBase.h"
 #include "GameFramework/Pawn.h"
-
-namespace
-{
-	const FName PlayerStatusWidgetName(TEXT("PlayerStatusWidget"));
-}
 
 void UCombatHUDWidgetBase::SetObservedPawn(APawn* NewPawn)
 {
@@ -108,18 +106,11 @@ FCrosshairHUDState UCombatHUDWidgetBase::GetCrosshairHUDState() const
 	return State;
 }
 
-void UCombatHUDWidgetBase::NativeConstruct()
-{
-	Super::NativeConstruct();
-	ResolvePlayerStatusWidget();
-}
-
 void UCombatHUDWidgetBase::NativeDestruct()
 {
 	// NativeDestruct 只清理订阅，不再触发蓝图表现，避免销毁期间访问已经释放的子 Widget。
-	UnbindObservedPawn();
+	UnbindObservedPawn(false);
 	ObservedPawn = nullptr;
-	NativePlayerStatusWidget = nullptr;
 
 	Super::NativeDestruct();
 }
@@ -167,7 +158,7 @@ void UCombatHUDWidgetBase::BindObservedPawn()
 	}
 }
 
-void UCombatHUDWidgetBase::UnbindObservedPawn()
+void UCombatHUDWidgetBase::UnbindObservedPawn(bool bResetTransientPresentation)
 {
 	BindWeapon(nullptr);
 
@@ -204,6 +195,13 @@ void UCombatHUDWidgetBase::UnbindObservedPawn()
 	WeaponComponent = nullptr;
 	WeaponPresentationComponent = nullptr;
 	VitalsComponent = nullptr;
+
+	if (bResetTransientPresentation && IsValid(HitMarkerWidget.Get()))
+	{
+		// Pawn 切换或 HUD 解绑时不能保留上一名角色产生的瞬时命中反馈。
+		HitMarkerWidget->ResetHitMarker();
+	}
+
 	bHasWeaponState = false;
 	bHasPlayerState = false;
 	bHasCrosshairState = false;
@@ -235,12 +233,6 @@ void UCombatHUDWidgetBase::BindWeapon(ANXRangedWeapon* NewWeapon)
 	}
 }
 
-void UCombatHUDWidgetBase::ResolvePlayerStatusWidget()
-{
-	// 迁移期不声明同名 BindWidget，避免改变旧 WBP 中 PlayerStatusWidget 变量的具体类型并破坏已有连线。
-	NativePlayerStatusWidget = Cast<UNXPlayerStatusWidgetBase>(GetWidgetFromName(PlayerStatusWidgetName));
-}
-
 void UCombatHUDWidgetBase::PushWeaponHUDState(bool bForce)
 {
 	const FWeaponHUDState NewState = GetWeaponHUDState();
@@ -251,7 +243,13 @@ void UCombatHUDWidgetBase::PushWeaponHUDState(bool bForce)
 
 	LastWeaponState = NewState;
 	bHasWeaponState = true;
-	ReceiveWeaponHUDState(NewState);
+
+	if (!ensureMsgf(IsValid(WeaponStatusWidget.Get()), TEXT("%s 缺少 WeaponStatusWidget BindWidget。"), *GetNameSafe(this)))
+	{
+		return;
+	}
+
+	WeaponStatusWidget->ApplyWeaponHUDState(NewState);
 }
 
 void UCombatHUDWidgetBase::PushPlayerHUDState(bool bForce)
@@ -265,14 +263,12 @@ void UCombatHUDWidgetBase::PushPlayerHUDState(bool bForce)
 	LastPlayerState = NewState;
 	bHasPlayerState = true;
 
-	// 子 Widget 完成原生基类接入后直接走 C++；迁移前继续调用旧蓝图分发事件。
-	if (IsValid(NativePlayerStatusWidget.Get()))
+	if (!ensureMsgf(IsValid(PlayerStatusWidget.Get()), TEXT("%s 缺少 PlayerStatusWidget BindWidget。"), *GetNameSafe(this)))
 	{
-		NativePlayerStatusWidget->ApplyPlayerHUDState(NewState);
 		return;
 	}
 
-	ReceivePlayerHUDState(NewState);
+	PlayerStatusWidget->ApplyPlayerHUDState(NewState);
 }
 
 void UCombatHUDWidgetBase::PushCrosshairHUDState(bool bForce)
@@ -285,7 +281,13 @@ void UCombatHUDWidgetBase::PushCrosshairHUDState(bool bForce)
 
 	LastCrosshairState = NewState;
 	bHasCrosshairState = true;
-	ReceiveCrosshairHUDState(NewState);
+
+	if (!ensureMsgf(IsValid(CrosshairWidget.Get()), TEXT("%s 缺少 CrosshairWidget BindWidget。"), *GetNameSafe(this)))
+	{
+		return;
+	}
+
+	CrosshairWidget->ApplyCrosshairHUDState(NewState);
 }
 
 void UCombatHUDWidgetBase::HandleCurrentWeaponChanged(
@@ -301,7 +303,7 @@ void UCombatHUDWidgetBase::HandleCurrentWeaponChanged(
 	// 事件只触发刷新，绑定对象从兼容 Getter 重读，保证 HUD 不持有另一份权威装备状态。
 	BindWeapon(InWeaponComponent->GetCurrentWeapon());
 	PushWeaponHUDState();
-	// 即使两把武器当前数值相同，也要让蓝图重新接收新武器的初始准心状态。
+	// 即使两把武器当前数值相同，也要向准心子 Widget 重发新武器的初始状态。
 	PushCrosshairHUDState(true);
 }
 
@@ -410,8 +412,15 @@ void UCombatHUDWidgetBase::HandleHitConfirmed(
 	UWeaponPresentationComponent* InPresentationComponent,
 	const FWeaponHitConfirmation& Confirmation)
 {
-	if (InPresentationComponent == WeaponPresentationComponent.Get())
+	if (InPresentationComponent != WeaponPresentationComponent.Get())
 	{
-		ReceiveHitConfirmation(Confirmation);
+		return;
 	}
+
+	if (!ensureMsgf(IsValid(HitMarkerWidget.Get()), TEXT("%s 缺少 HitMarkerWidget BindWidget。"), *GetNameSafe(this)))
+	{
+		return;
+	}
+
+	HitMarkerWidget->ShowHitConfirmation(Confirmation);
 }

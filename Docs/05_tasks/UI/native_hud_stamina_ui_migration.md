@@ -4,7 +4,7 @@
 >
 > 现有 HUD：[武器命中反馈开发计划](../weapon/weapon_hit_feedback_development_plan.md)
 >
-> 当前状态：4.1、4.2、4.3 与编辑器/UMG 接入已完成；基础 Health/Stamina 初始化链路已通过，交互功能待手动验收
+> 当前状态：C++、编辑器/UMG 与 PlayerStatus 强类型收尾已完成；基础 Health/Stamina 初始化链路已通过，交互功能待手动验收
 
 ## 1. 目标
 
@@ -22,7 +22,7 @@
 
 ## 2. 当前问题与职责边界
 
-当前 `UCombatHUDWidgetBase` 已在 C++ 中完成 Gameplay 事件订阅和 HUD State 汇总，但仍通过 `BlueprintImplementableEvent` 把状态交给根 WBP。根 WBP 和子 WBP 需要继续执行状态分发、拆结构体和控件赋值，节点增加后不易维护。
+迁移前，`UCombatHUDWidgetBase` 虽已完成 Gameplay 事件订阅和 HUD State 汇总，PlayerStatus 仍需要根 WBP 分发并在子 WBP 中拆结构体、设置控件。该问题现已通过原生子 Widget 和强类型直连解决。
 
 推荐边界：
 
@@ -43,9 +43,9 @@ AGASPALSPlayerController
     └── WBP_CombatHUD                     // UMG 布局
         ├── UNXPlayerStatusWidgetBase
         │   └── WBP_PlayerStatus          // Health + Stamina
-        ├── WBP_WeaponStatus              // 后续迁移
-        ├── WBP_Crosshair                 // 后续迁移
-        └── WBP_HitMarker                 // 后续迁移
+        ├── WBP_WeaponStatus              // 已在后续 3.2 完成原生化迁移
+        ├── WBP_Crosshair                 // 已在后续 3.3 完成原生化迁移
+        └── WBP_HitMarker                 // 已在后续 3.4 完成原生化迁移
 ```
 
 首轮只迁移 `WBP_PlayerStatus`。验证模式后，再按 WeaponStatus、Crosshair、HitMarker 的顺序处理，避免一次修改所有蓝图资产。
@@ -113,13 +113,11 @@ ApplyPlayerHUDState(const FPlayerHUDState& State)
 
 ### 4.3 根 HUD 直接分发
 
-完成状态：已完成（UHT、Development Editor 编译和链接通过；现有两个 HUD 蓝图定向编译为 0 错误、0 警告）
+完成状态：已完成（强类型 `BindWidget` 收尾、UHT、Development Editor、两个 HUD 蓝图定向编译和冷启动 PIE 均通过）
 
-`UCombatHUDWidgetBase.NativeConstruct()` 按 Designer 名称 `PlayerStatusWidget` 查找子 Widget，并将成功转换的 `UNXPlayerStatusWidgetBase` 缓存在原生指针中。`PushPlayerHUDState()` 优先直接调用 `ApplyPlayerHUDState()`；转换失败时才调用旧 `ReceivePlayerHUDState`，两条路径不会重复分发。
+`UCombatHUDWidgetBase` 现在通过必需的强类型 `PlayerStatusWidget` `BindWidget` 持有 `UNXPlayerStatusWidgetBase`，`PushPlayerHUDState()` 直接调用 `ApplyPlayerHUDState()`。UMG 编译器会校验名称和类型，运行时仍以 `ensure` 报告意外契约失效。
 
-迁移期不声明同名根 `BindWidget`。现有 `WBP_CombatHUD` 已生成具体类型的 `PlayerStatusWidget` 变量，提前加入较宽的原生同名属性会改变旧 Event Graph 的引脚类型并破坏已有连线。编辑器迁移和旧节点清理完成后，可再将名称解析收紧为强类型 `BindWidget`。
-
-迁移期间先保留 `ReceivePlayerHUDState`，避免 C++ 编译后旧 WBP 立即断链。编辑器资产完成迁移并验证后，再删除根 WBP 中的旧事件实现和 C++ 兼容事件。其他三个 `Receive...` 事件暂时保留。
+迁移期使用的 `GetWidgetFromName`、`NativePlayerStatusWidget` 缓存和 `ReceivePlayerHUDState` 回退均已删除。Weapon、Crosshair 与 HitMarker 事件已分别在后续 3.2、3.3、3.4 清理，根 HUD 不再保留机械蓝图分发事件。
 
 ## 5. 编辑器与 UMG 接入
 
@@ -129,7 +127,7 @@ ApplyPlayerHUDState(const FPlayerHUDState& State)
 2. 将 `WBP_PlayerStatus` 的父类改为 `UNXPlayerStatusWidgetBase`。
 3. 在 Designer 中保留现有 Health 控件，并在其下增加 Stamina ProgressBar 和数值文本。
 4. 将四个控件准确命名为 C++ `BindWidget` 契约名称，并勾选 Is Variable。
-5. 确认 `WBP_CombatHUD` 中玩家状态子 Widget 的实例名准确为 `PlayerStatusWidget`，供根 C++ 迁移解析器查找。
+5. 确认 `WBP_CombatHUD` 中玩家状态子 Widget 的实例名准确为 `PlayerStatusWidget`，满足根 C++ `BindWidget` 契约。
 6. 编译 `WBP_PlayerStatus` 和 `WBP_CombatHUD`，确认没有缺失绑定控件错误。
 7. 验证 C++ 直接更新 Health/Stamina 后，删除 `WBP_CombatHUD.ReceivePlayerHUDState` 的旧分发节点和 `WBP_PlayerStatus` 的旧 Apply 节点。
 8. 再次编译、保存并运行 PIE。
@@ -139,7 +137,8 @@ ApplyPlayerHUDState(const FPlayerHUDState& State)
 - `WBP_PlayerStatus` 已继承 `UNXPlayerStatusWidgetBase`，旧 `ApplyPlayerHUDState` 蓝图函数图已移除。
 - Health/Stamina 四个原生绑定控件均已创建并启用 `Is Variable`，Stamina 使用独立标签和金黄色进度条。
 - `WBP_CombatHUD.PlayerStatusWidget` 实例名保持不变，状态区高度已扩展，Health 与 Stamina 均能完整显示 `100 / 100`。
-- 根 HUD 的旧 `ReceivePlayerHUDState` 三节点分发链已移除；Weapon、Crosshair 与 Hit Marker 分发链保持原状。
+- 根 HUD 的旧 `ReceivePlayerHUDState` 三节点分发链已移除；Weapon、Crosshair 与 HitMarker 分发链也已在后续阶段清理，根 EventGraph 不再承担状态分发。
+- 根 C++ 已使用强类型 `PlayerStatusWidget` 直接分发，迁移期名称查找和蓝图回退已移除。
 - `WBP_PlayerStatus` Event Graph 只保留空生命周期事件，不再承担状态拆包、格式化或控件赋值。
 
 第一版 Stamina Bar 始终显示，便于验证。满体力自动隐藏和延迟淡出属于后续表现迭代，不应与数据接入同时开发。
@@ -194,12 +193,12 @@ Cost / Recovery GameplayEffect
 
 - [x] 新 C++ 直连路径验收前未删除旧 `ReceivePlayerHUDState`。
 - [x] 旧蓝图分发节点已删除，两个 Widget Blueprint 已重新编译并保存。
-- [ ] 完成交互功能手动验收后，移除 C++ `ReceivePlayerHUDState` 兼容事件与回退分支。
-- [ ] WeaponStatus、Crosshair 和 HitMarker 保持现状，本阶段不顺带重构。
+- [x] C++ `ReceivePlayerHUDState` 兼容事件、名称查找与回退分支已移除。
+- [x] WeaponStatus、Crosshair 和 HitMarker 在本阶段保持现状；三者已分别在后续 3.2、3.3、3.4 完成原生化迁移。
 
 ## 8. 后续顺序
 
-1. WeaponStatus：迁移弹药、武器名、换弹状态和显隐赋值。
-2. Crosshair：迁移扩散距离、ADS 和战斗可用状态。
-3. HitMarker：Timer 与状态机迁入 C++，Widget Animation 保留在 UMG。
-4. 全部子 Widget 完成后，移除根 HUD 剩余的机械蓝图分发事件。
+1. [已完成](native_combat_hud_remaining_migration.md#32-迁移-weaponstatus) WeaponStatus：迁移弹药、武器名、换弹状态和显隐赋值。
+2. [已完成](native_combat_hud_remaining_migration.md#33-迁移-crosshair) Crosshair：迁移扩散距离、ADS 和战斗可用状态。
+3. [已完成](native_combat_hud_remaining_migration.md#34-迁移-hitmarker) HitMarker：Timer 与状态机迁入 C++，Widget Animation 保留在 UMG。
+4. [已完成](native_combat_hud_remaining_migration.md#35-根-hud-最终清理) 移除根 HUD 剩余的机械蓝图分发事件。
