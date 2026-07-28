@@ -4,7 +4,7 @@
 >
 > 前置条件：阶段 1 的枪械/GASPALS 回归与系统文档完成后开始
 >
-> 当前状态：进行中（5.1 至 5.4 C++ 已完成，待编辑器运行时验收）
+> 当前状态：已完成（C++、编辑器迁移与 Standalone 回归通过；Listen Server 验收按联机阶段延后）
 
 ## 1. 目标
 
@@ -91,7 +91,7 @@ GAS 管理“能不能做、何时开始和结束”；领域对象管理“具�
 | `ANXRangedWeapon` | 继承通用 Equipment Actor，继续保持远程武器职责 |
 | `UWeaponPresentationComponent` | 保留，不迁入 GAS；阶段 2 只适配装备变化契约 |
 | `UPlayerRecoilComponent` | 保留，本地逐帧相机状态不进入 GAS |
-| `UHealthComponent` | 保留到 AttributeSet 正式迁移阶段 |
+| `UHealthComponent` | 阶段 2 当时保留；阶段 2.5 已迁移到 GAS Vitals 并删除旧类 |
 
 目标继承结构：
 
@@ -270,7 +270,7 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 | 弹药、射速、散布、射线 | `ANXRangedWeapon` |
 | 动画、VFX、音效指令 | Presentation 层 |
 | 本地后坐力 | `UPlayerRecoilComponent` |
-| 生命值 | `UHealthComponent`，直到正式迁移 |
+| 生命值与精力 | `ANXPlayerState` ASC 中的 `UNXVitalsAttributeSet`（阶段 2.5 已完成迁移） |
 
 任何兼容字段只能是查询或瞬时适配，不能成为第二份可写状态。
 
@@ -278,25 +278,28 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 
 ### 8.1 构建
 
-- [ ] UHT、`GASPALSEditor Win64 Development` 编译和链接通过。
-- [ ] Rider 工程文件包含所有新增 C++ 文件。
-- [ ] 关键蓝图全部编译无错误。
+- [x] UHT、`GASPALSEditor Win64 Development` 编译和链接通过。
+- [x] Rider 工程文件包含所有新增 C++ 文件。
+- [x] 关键蓝图全部编译无错误。
 
 ### 8.2 Action 契约
 
-- [ ] `RequestCombatAction(Combat.Action.Test)` 可以激活测试 Ability。
-- [ ] 无效 Tag、State Tag 和 Animation Tag 会被拒绝。
-- [ ] Action 激活失败不会修改装备、状态或表现。
-- [ ] Standalone 与两玩家 Listen Server 冒烟测试无交叉 ASC。
+- [x] `RequestCombatAction(Combat.Action.Test)` 可以激活测试 Ability。
+- [x] 无效 Tag、根 Tag、State Tag 和 Animation Tag 会在入口校验中被拒绝。
+- [x] Action 激活失败不会修改装备、状态或表现。
+- [x] Standalone 冒烟测试没有重复或交叉 ASC。
+- [ ] 两玩家 Listen Server 冒烟测试无交叉 ASC。
+
+Standalone 已通过；两玩家 Listen Server 作为阶段 8 联机验收项保留，不阻塞阶段 3 单机近战闭环。
 
 ### 8.3 Equipment 回归
 
-- [ ] 角色上只有一个实际装备组件实例。
-- [ ] Current Equipment 是唯一运行时装备引用。
-- [ ] Rifle/Pistol 装备、卸装、切换和附着正常。
-- [ ] 射击、换弹、弹药 HUD、准心、后坐力和动画正常。
-- [ ] Weapon Presentation 委托没有重复绑定或重复播放。
-- [ ] Health、伤害测试目标和 GASPALS 移动正常。
+- [x] 角色上只有一个实际装备组件实例。
+- [x] Current Equipment 是唯一运行时装备引用。
+- [x] Rifle/Pistol 装备、卸装、切换和附着正常。
+- [x] 射击、换弹、弹药 HUD、准心、后坐力和动画正常。
+- [x] Weapon Presentation 委托没有重复绑定或重复播放。
+- [x] GAS Vitals、伤害测试目标和 GASPALS 移动正常。
 
 ## 9. 风险与回退
 
@@ -311,12 +314,12 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 
 | 工作项 | 状态 |
 |---|---|
-| 2.1 Tag 治理与 Action 入口 | C++ 已完成，待编辑器运行时验收 |
-| 2.2 通用 Equipment Actor | C++ 已完成，待编辑器迁移与回归 |
-| 2.3 通用 Equipment Component 与兼容层 | C++ 已完成，待编辑器迁移与回归 |
-| 2.4 现有调用方适配 | C++ 已完成，待编辑器运行时验收 |
-| 2.5 编辑器迁移与蓝图编译 | 待开发 |
-| 2.6 Action/Equipment/枪械回归 | 待测试 |
-| 2.7 系统文档与路线图同步 | 待开发 |
+| 2.1 Tag 治理与 Action 入口 | 已完成并通过 Standalone 验收 |
+| 2.2 通用 Equipment Actor | 已完成并通过现有枪械回归 |
+| 2.3 通用 Equipment Component 与兼容层 | 已完成，运行时只有一份 Current Equipment |
+| 2.4 现有调用方适配 | 已完成并通过 Standalone 验收 |
+| 2.5 编辑器迁移与蓝图编译 | 已完成 |
+| 2.6 Action/Equipment/枪械回归 | Standalone 已通过，Listen Server 延后 |
+| 2.7 系统文档与路线图同步 | 已完成（2026-07-28） |
 
-阶段 2 完成并验收后，再编写阶段 3“单手剑最小闭环”任务文档。动态装备 Ability 授予、通用 ActionTag 动画解析和第一条近战命中链，应随真实 `GA_LightAttack` 一起实现，不在本阶段建立无调用方框架。
+阶段 2 已完成。下一步编写阶段 3“首把近战武器最小闭环（大剑）”任务文档；动态装备 Ability 授予、通用 ActionTag 动画解析和第一条近战命中链随真实 `GA_LightAttack` 一起实现，不提前建立无调用方框架。

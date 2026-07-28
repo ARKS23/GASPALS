@@ -67,8 +67,8 @@ BlendOutTime   = 0.15
 flowchart TD
     A["输入请求装备 BP_Rifle 或 BP_Pistol"] --> B["WeaponComponent::EquipWeapon"]
     B --> C["Spawn 对应 Weapon Actor"]
-    C --> D["CurrentWeapon = NewWeapon"]
-    D --> E["OnCurrentWeaponChanged"]
+    C --> D["CurrentEquipment = NewWeapon"]
+    D --> E["兼容层广播 OnCurrentWeaponChanged"]
     E --> F["WeaponPresentationComponent::SetCurrentWeapon"]
     F --> G["BuildAnimationSelectionContext"]
     G --> H["EvaluateAnimationProfile"]
@@ -79,17 +79,19 @@ flowchart TD
 
 ### 4.1 WeaponComponent 传递什么
 
-`UWeaponComponent::EquipWeapon()` 生成对应武器类，并保存实际 Actor 指针：
+`UWeaponComponent::EquipWeapon()` 调用通用装备流程；实际 Actor 指针只保存在基类的 `CurrentEquipment` 中：
 
 ```text
 Source/GASPALS/Weapons/WeaponComponent.cpp
 
-SpawnWeapon(WeaponClass)
--> CurrentWeapon = NewWeapon
--> BroadcastCurrentWeaponChanged(nullptr, NewWeapon)
+EquipEquipment(WeaponClass)
+-> UNXEquipmentComponent::SpawnEquipment()
+-> CurrentEquipment = NewWeapon
+-> UWeaponComponent::HandleCurrentEquipmentChanged()
+-> OnCurrentWeaponChanged
 ```
 
-事件中传递的是 `AWeaponBase* NewWeapon`，不是 Rifle/Pistol 枚举。
+`GetCurrentWeapon()` 只把 `CurrentEquipment` 转型为 `ANXRangedWeapon*`，不保存第二份可写武器状态。兼容事件中传递的是 `ANXRangedWeapon* NewWeapon`，不是 Rifle/Pistol 枚举。
 
 ### 4.2 表现组件如何知道武器类型
 
@@ -126,9 +128,9 @@ Chooser 只在以下情况重新解析：
 
 ```mermaid
 flowchart TD
-    A["按下 Reload"] --> B["WeaponComponent::StartReload"]
-    B --> C["CurrentWeapon::StartReload"]
-    C --> D["WeaponBase 校验并进入 Reloading"]
+    A["按下 Reload"] --> B["WeaponComponent::Reload"]
+    B --> C["GetCurrentWeapon()->StartReload"]
+    C --> D["ANXRangedWeapon 校验并进入 Reloading"]
     D --> E["OnReloadStarted"]
     E --> F["WeaponPresentationComponent::HandleReloadStarted"]
     F --> G["从 CurrentAnimationProfile 读取 Reload Entry"]
@@ -141,7 +143,7 @@ flowchart TD
 
 ### 5.1 Gameplay 先决定换弹是否合法
 
-`AWeaponBase::StartReload()` 先检查弹药、弹匣和当前状态。只有 Gameplay 真正进入换弹状态后才广播 `OnReloadStarted`。
+`ANXRangedWeapon::StartReload()` 先检查弹药、弹匣和当前状态。只有 Gameplay 真正进入换弹状态后才广播 `OnReloadStarted`。
 
 动画层不能自行决定补弹，也不能因为 Montage 缺失阻止 Gameplay。
 
@@ -262,9 +264,12 @@ AnimationProfileReady
 
 ```text
 Source/GASPALS/Weapons/WeaponComponent.cpp
-  EquipWeapon / BroadcastCurrentWeaponChanged
+  EquipWeapon / GetCurrentWeapon / HandleCurrentEquipmentChanged
 
-Source/GASPALS/Weapons/WeaponBase.cpp
+Source/GASPALS/Equipment/NXEquipmentComponent.cpp
+  EquipEquipment / CurrentEquipment / BroadcastCurrentEquipmentChanged
+
+Source/GASPALS/Weapons/NXRangedWeapon.cpp
   StartReload / FinishReload / CancelReload
 
 Source/GASPALS/Weapons/WeaponPresentationComponent.cpp

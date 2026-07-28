@@ -6,7 +6,7 @@
 >
 > 执行位置：阶段 2 完成后、第一条近战伤害链接入前
 >
-> 当前状态：5.5 迁移与清理已完成，待单机交互和联机验收
+> 当前状态：迁移与清理已完成，Standalone 基线回归通过；治疗/Reset 等专项场景和联机验收待执行
 
 ## 1. 目标
 
@@ -285,8 +285,9 @@ BaseDamage + DamageType + Source/Target Tags
 ### 单机功能
 
 - [x] 玩家和 DamageTestTarget 在默认关卡中均正确初始化为 `100/100`。
-- [ ] 在 PIE 中人工确认 HUD 初始生命值不再显示 0。
-- [ ] 枪械伤害与 DataAsset 数值一致，未配置 Effect 时给出明确错误。
+- [x] 在 PIE 中人工确认 HUD 初始生命值不再显示 0。
+- [x] 已配置 GameplayEffect 时，枪械伤害、DamageTestTarget 和 HUD 基线链路正常。
+- [ ] 未配置 Damage GameplayEffect 时给出明确错误且不静默回退。
 - [ ] 治疗不会超过 MaxHealth，死亡后普通治疗不会直接复活。
 - [ ] Health 首次归零时 Dead Tag 和死亡事件各触发一次。
 - [ ] 死亡会停止开火、取消 ADS，并保持 Hit Marker 的伤害/击杀判定正确。
@@ -313,8 +314,8 @@ BaseDamage + DamageType + Source/Target Tags
 | 5.3 GameplayEffect 资源接入 | 四个 GE 资源已创建并完成首轮配置，默认关卡加载通过 |
 | 5.4 现有调用方迁移 | 已完成，UHT/编译/链接及默认关卡冒烟通过 |
 | 5.5 蓝图迁移与旧组件删除 | 已完成，关键蓝图已重编译并保存，旧类已删除 |
-| 单机、联机与回归验收 | 命令行冒烟通过，待 PIE 交互与联机测试 |
+| 单机、联机与回归验收 | Standalone 基线回归通过；治疗/Reset、重新 Possess 与联机专项待测试 |
 
-完成本文件验收后，再开始 `GA_LightAttack` 与近战 Sweep。这样近战和枪械从第一天起共用同一条伤害、死亡与状态链，不需要再经历第二次生命值迁移。
+Standalone 基线已经满足 `GA_LightAttack` 与近战 Sweep 的前置条件。治疗、Reset、重新 Possess 和联机专项继续保留在本文件中跟踪，但不阻塞阶段 3 的单机近战闭环；近战和枪械仍共用同一条伤害、死亡与状态链。
 
 上层路线图已同步：阶段 3 直接复用 GAS 伤害入口，原阶段 7 调整为 Poise、抗性和 Buff/Debuff 等高级 Attribute/Effect 扩展。

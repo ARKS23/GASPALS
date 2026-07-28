@@ -4,7 +4,7 @@
 >
 > 历史背景：[武器命中反馈开发计划](../weapon/weapon_hit_feedback_development_plan.md)
 >
-> 当前状态：3.1 至 3.5 的原生化结构迁移已完成，完整构建与冷启动 PIE 已通过；各模块交互验收待手动执行
+> 当前状态：3.1 至 3.5 已完成，完整构建、冷启动 PIE 与 Standalone 常规交互回归通过；重新 Possess 和联机专项待验收
 
 ## 1. 目标与边界
 
@@ -31,11 +31,11 @@ Gameplay 事件
 
 | 模块 | 当前数据层 | 当前 WBP 逻辑 | 目标 |
 |---|---|---|---|
-| PlayerStatus | C++ 快照、强类型直连与控件更新已完成 | 仅 Designer，表现事件可选 | 完成交互验收 |
-| WeaponStatus | C++ 快照、强类型直连与控件更新已完成 | 仅 Designer，表现事件可选 | 完成交互验收 |
-| Crosshair | C++ 快照、原生插值与强类型直连已完成 | 仅保留 Designer 控件，表现事件可选 | 完成交互验收 |
-| HitMarker | C++ 校验、样式、Timer 与强类型直连已完成 | 仅保留 Designer 控件，表现事件可选 | 完成交互验收 |
-| CombatHUD | 负责订阅、快照构造和四个子 Widget 直连 | EventGraph 已完全清空 | 完成交互验收 |
+| PlayerStatus | C++ 快照、强类型直连与控件更新已完成 | 仅 Designer，表现事件可选 | Standalone 常规回归通过 |
+| WeaponStatus | C++ 快照、强类型直连与控件更新已完成 | 仅 Designer，表现事件可选 | Standalone 常规回归通过 |
+| Crosshair | C++ 快照、原生插值与强类型直连已完成 | 仅保留 Designer 控件，表现事件可选 | Standalone 常规回归通过 |
+| HitMarker | C++ 校验、样式、Timer 与强类型直连已完成 | 仅保留 Designer 控件，表现事件可选 | Standalone 常规回归通过 |
+| CombatHUD | 负责订阅、快照构造和四个子 Widget 直连 | EventGraph 已完全清空 | Standalone 常规回归通过 |
 
 最终结构：
 
@@ -53,7 +53,7 @@ AGASPALSPlayerController
 
 ### 3.1 PlayerStatus 收尾
 
-完成状态：结构收尾已完成（强类型 `BindWidget`、兼容入口清理、UHT/Development Editor、两个 WBP 定向编译和冷启动 PIE 均通过）；伤害、精力变化与重新 Possess 待手动交互验收
+完成状态：结构收尾和 Standalone 常规交互回归已完成；治疗、Stamina Cost/Recovery 与重新 Possess 作为专项场景保留
 
 #### C++ 端
 
@@ -66,7 +66,7 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 1. 已将 `NativePlayerStatusWidget` 收紧为 `meta=(BindWidget)` 的强类型 `PlayerStatusWidget`。
 2. 已删除 `ReceivePlayerHUDState`、`GetWidgetFromName` 和迁移期缓存。
 3. 保留 `ReceiveHealthDecreased`、`ReceiveStaminaSpent`，它们只允许播放表现。
-4. 伤害、治疗、精力消耗/恢复、死亡和重新 Possess 仍需手动交互验收。
+4. 基础生命值、精力与死亡显示已通过常规回归；治疗、精力消耗/恢复和重新 Possess 仍需专项验收。
 
 #### 编辑器端
 
@@ -76,7 +76,7 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 
 ### 3.2 迁移 WeaponStatus
 
-完成状态：C++ 原生基类、根 HUD 强类型直连、旧蓝图链清理、UHT/Development Editor、两个 WBP 定向编译和冷启动 PIE 均通过；装备、卸装、换枪、开火和换弹待手动交互验收
+完成状态：C++ 原生化、蓝图清理和 Standalone 装备/开火/换弹常规回归均已完成
 
 #### C++ 端
 
@@ -113,11 +113,11 @@ Text_Reloading
 2. 现有五个文本控件名称与类型已满足 C++ 契约，无需改动布局。
 3. 已删除旧 `ApplyWeaponHUDState` 函数图和根 HUD 的 `ReceiveWeaponHUDState` 分发链。
 4. 两个 WBP 已定向编译并保存；无武器折叠和冷启动日志检查已通过。
-5. 装备、卸装、换枪、开火和换弹仍需手动交互验收，并确认旧武器事件不会继续刷新 UI。
+5. 装备、卸装、换枪、开火和换弹已通过 Standalone 常规回归；重新 Possess 后的旧武器解绑仍随专项场景验证。
 
 ### 3.3 迁移 Crosshair
 
-完成状态：C++ 原生基类、根 HUD 强类型直连、旧蓝图 Tick/函数/变量清理、UHT/Development Editor、两个 WBP 定向编译与冷启动 PIE 构造链均已完成；移动、滞空、连续开火和 ADS 待手动交互验收
+完成状态：C++ 原生化、旧蓝图 Tick/函数/变量清理，以及移动、滞空、连续开火和 ADS 的 Standalone 常规回归均已完成
 
 #### C++ 端
 
@@ -146,11 +146,11 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 2. `Image_Top`、`Image_Bottom`、`Image_Left`、`Image_Right` 已满足强类型 `BindWidget` 契约。
 3. 已删除旧 `ApplyCrosshairHUDState`、Event Tick 节点链和六个运行时变量。
 4. 已删除根 HUD 的 `ReceiveCrosshairHUDState` 三节点分发链。
-5. 两个 WBP 已定向编译并保存，冷启动 PIE 无绑定或蓝图运行错误；无武器、战斗禁用、移动、滞空、连续射击和 ADS 仍需手动验收。
+5. 两个 WBP 已定向编译并保存，冷启动 PIE 无绑定或蓝图运行错误；移动、滞空、连续射击和 ADS 已通过 Standalone 常规回归。
 
 ### 3.4 迁移 HitMarker
 
-完成状态：C++ 原生基类、根 HUD 强类型直连、旧蓝图函数与分发链清理、UHT/Development Editor、两个 WBP 定向编译与冷启动 PIE 构造链均已完成；Damage、Kill、打墙和快速连射待手动交互验收
+完成状态：C++ 原生化、旧蓝图函数与分发链清理，以及 Damage/Kill/打墙/连续命中的 Standalone 常规回归均已完成
 
 #### C++ 端
 
@@ -180,7 +180,7 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 2. 四个 `Image_*` 已满足强类型 `BindWidget` 契约。
 3. 已删除 `PlayHitConfirmation`、`HideHitMarker` 和根 HUD 的三节点分发链。
 4. 当前 WBP 只保留 Designer；需要动画时实现可选表现事件，不重建 Timer 或类型分支。
-5. 两个 WBP 已定向编译并保存，冷启动 PIE 无绑定或蓝图运行错误；打墙、Damage、Kill 和快速连射仍需手动验收。
+5. 两个 WBP 已定向编译并保存，冷启动 PIE 无绑定或蓝图运行错误；打墙、Damage、Kill 和连续命中已通过 Standalone 常规回归。
 
 ### 3.5 根 HUD 最终清理
 
@@ -197,13 +197,14 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 ## 4. 验收清单
 
 - [x] PlayerStatus 已改为强类型直连，并移除兼容回退。
-- [ ] PlayerStatus 完成伤害、精力变化、死亡和重新 Possess 交互验收。
+- [x] PlayerStatus 完成 Standalone 伤害、基础精力和死亡显示回归。
+- [ ] PlayerStatus 完成治疗、Stamina Cost/Recovery 和重新 Possess 专项验收。
 - [x] WeaponStatus 已改为原生控件更新和强类型直连，并移除旧蓝图分发链。
-- [ ] WeaponStatus 的装备、卸装、换枪、开火和换弹状态正确。
+- [x] WeaponStatus 的装备、卸装、换枪、开火和换弹状态正确。
 - [x] Crosshair 已改为原生插值、控件更新和强类型直连，并移除旧蓝图 Tick 与分发链。
-- [ ] Crosshair 的显隐、动态扩散和 ADS 过渡正确。
+- [x] Crosshair 的显隐、动态扩散和 ADS 过渡正确。
 - [x] HitMarker 已改为原生校验、样式、Timer 和强类型直连，并移除旧蓝图函数与分发链。
-- [ ] HitMarker 的 Damage/Kill、持续时间和连续命中重置正确。
+- [x] HitMarker 的 Damage/Kill、持续时间和连续命中重置正确。
 - [ ] 重新 Possess 后旧 Pawn、旧武器事件已解绑。
 - [x] 四个 WBP 均不再使用蓝图 Tick 或 Gameplay 查询。
 - [x] 根 `WBP_CombatHUD.EventGraph` 已完全清空。

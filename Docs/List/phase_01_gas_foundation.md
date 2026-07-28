@@ -2,7 +2,7 @@
 
 > 上层路线图：[hybrid_combat_gas_roadmap.md](./hybrid_combat_gas_roadmap.md)
 >
-> 当前状态：待开发
+> 当前状态：已完成（ASC、Owner/Avatar、Ability 生命周期和 Standalone 枪械/GASPALS 回归通过；联机专项延后）
 
 ## 1. 阶段目标
 
@@ -348,11 +348,11 @@ Y 键
 
 ### 7.3 现有功能回归
 
-- [ ] GASPALS 移动、跳跃、相机和 Overlay 正常。
-- [ ] Rifle/Pistol 装备、射击、换弹和弹药 HUD 正常。
-- [ ] 准心、散布和后坐力没有行为变化。
-- [ ] `HealthComponent` 和测试目标伤害逻辑正常。
-- [ ] Output Log 没有 ActorInfo、重复 Ability 或无效 Tag 警告。
+- [x] GASPALS 移动、跳跃、相机和 Overlay 正常。
+- [x] Rifle/Pistol 装备、射击、换弹和弹药 HUD 正常。
+- [x] 准心、散布和后坐力没有行为变化。
+- [x] 阶段 1 当时的生命值和测试目标伤害链正常；当前已由 GAS Vitals 取代旧 `HealthComponent`。
+- [x] Output Log 没有 ActorInfo、重复 Ability 或无效 Tag 警告。
 
 ## 8. 常见问题排查
 
@@ -383,7 +383,7 @@ Y 键
 - [x] 项目侧 GameMode 正确使用 `BP_NXPlayerState`，未修改插件 GameMode。
 - [x] 没有新增 AttributeSet、Effect、Cue、Montage、伤害或实际重生逻辑。
 - [x] 持久数据和重生重置数据的边界已明确。
-- [ ] 现有枪械与 GASPALS 功能回归通过。
+- [x] 现有枪械与 GASPALS 功能回归通过。
 - [x] 完整冷编译通过，新增 C++ 代码包含必要中文注释。
 
 ## 10. 进度跟踪
@@ -398,7 +398,7 @@ Y 键
 | 6. 创建 BP_NXPlayerState 并配置项目 GameMode | 已完成 |
 | 7. BP_PlayerCharacter 添加临时输入 | 已完成 |
 | 8. Owner/Avatar 与 Ability 生命周期测试 | 已完成 |
-| 9. 枪械/GASPALS 回归与系统文档同步 | 待测试 |
+| 9. 枪械/GASPALS 回归与系统文档同步 | 已完成（2026-07-28） |
 
 实现过程中每完成一个工作项就更新本表，不在最后一次性修改全部状态。
 
@@ -427,13 +427,13 @@ Docs/List/hybrid_combat_gas_roadmap.md
 - `Plugins/GASPALS` 的 GameMode 或其他插件资产。
 - 用户已有的文档删除和其他无关工作区变化。
 
-## 12. 完成后的文档工作
+## 12. 完成后的文档工作（已执行）
 
-阶段验收通过后：
+阶段验收后已经完成：
 
-1. 把本文状态改为“已完成”，逐项更新进度表。
-2. 在总路线图中把阶段 1 标记为“已完成”。
-3. 新增 `Docs/system/gas_foundation_data_flow.md`，记录实际调用链、Owner/Avatar 关系和调试方法。
-4. 再编写阶段 2“通用动作与装备契约”开发文档。
+1. 本文状态和进度表已同步为“已完成”。
+2. 总路线图中的阶段 1 已标记为“已完成”。
+3. [GAS 基础运行链](../system/gas_foundation_data_flow.md) 已记录实际 Owner/Avatar、初始化、Ability 激活和清理流程。
+4. 阶段 2“通用动作与装备契约”已开发并通过 Standalone 回归。
 
-只有阶段 1 完整验收后，才开始近战武器、AttributeSet 或 GameplayEffect 开发。
+阶段 1 的 `UNXGA_TestAbility` 和临时测试输入继续保留到阶段 3 的真实 `GA_LightAttack` 跑通，再统一清理测试资产。

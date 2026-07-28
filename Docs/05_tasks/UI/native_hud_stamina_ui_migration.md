@@ -4,7 +4,7 @@
 >
 > 现有 HUD：[武器命中反馈开发计划](../weapon/weapon_hit_feedback_development_plan.md)
 >
-> 当前状态：C++、编辑器/UMG 与 PlayerStatus 强类型收尾已完成；基础 Health/Stamina 初始化链路已通过，交互功能待手动验收
+> 当前状态：C++、编辑器/UMG 与 PlayerStatus 强类型收尾已完成；Standalone 基础显示与后续 Combat HUD 回归通过，Stamina Cost/Recovery 和重新 Possess 专项待验收
 
 ## 1. 目标
 

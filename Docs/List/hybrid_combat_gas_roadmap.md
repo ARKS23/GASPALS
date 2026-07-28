@@ -105,10 +105,10 @@ Combat.State.Invulnerable
 Combat.State.Staggered
 Combat.State.Dead
 
-Equipment.Category.Melee.Sword.OneHanded
+Equipment.Category.Melee.Sword.Greatsword
 Equipment.Category.Ranged.Rifle
-Animation.Stance.Sword.OneHanded
-Animation.Stance.Rifle
+Animation.Weapon.Sword.Greatsword
+Animation.Weapon.Rifle
 ```
 
 动画条目长期以 `ActionTag` 查找 Montage，不继续扩展 `EWeaponAnimationCueType`。现有枪械枚举在迁移期间保留兼容。
@@ -140,8 +140,8 @@ GAS 负责：
 | 0 | 冻结并记录枪械基线 | 射击、换弹、HUD、Overlay 可回归 | 已具备 |
 | 1 | [GAS 基础设施](./phase_01_gas_foundation.md) | ASC 初始化、Tag 激活、Ability 授予与取消正常 | 已完成 |
 | 2 | [通用动作与装备契约](../05_tasks/GAS/phase_02_combat_action_equipment_contract.md) | 同一入口可识别近战/枪械装备，不复制两套装备状态 | 已完成 |
-| 2.5 | [Vitals、伤害与死亡基础](../05_tasks/GAS/gas_vitals_damage_death_foundation.md) | Health/Stamina、伤害、死亡、HUD 统一进入 GAS | 清理完成，待交互/联机验收 |
-| 3 | 单手剑最小闭环 | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 待开发 |
+| 2.5 | [Vitals、伤害与死亡基础](../05_tasks/GAS/gas_vitals_damage_death_foundation.md) | Health/Stamina、伤害、死亡、HUD 统一进入 GAS | Standalone 基线通过，专项/联机待验收 |
+| 3 | 首把近战武器最小闭环（大剑） | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 待开发 |
 | 4 | 魂类基础状态 | 体力、重攻击、闪避、格挡、招架、硬直 | 待开发 |
 | 5 | 连击与动画数据驱动 | 输入缓存、取消窗口、Combo 分支、Chooser/Profile 换资源 | 待开发 |
 | 6 | 枪械 GAS 适配 | Fire/Reload Ability 包装现有 ANXRangedWeapon，枪械行为不回归 | 待开发 |
@@ -167,9 +167,10 @@ GAS 负责：
 - 保留 `UWeaponComponent` 枪械 API 作为迁移适配，并确保只有一份 Current Equipment 状态。
 - `CombatComponent` 冻结新功能并保留现有枪械链；通用动画解析随阶段 3 的真实轻攻击需求接入。
 
-### 阶段 3：单手剑最小闭环
+### 阶段 3：首把近战武器最小闭环（大剑）
 
-- 只选择一把剑和一条轻攻击动画完成端到端验证。
+- 当前已导入的模型和动画属于 Greatsword 资源，阶段命名、Tag、Profile 与资产目录统一按“大剑”表达，不再误标为单手剑。
+- 只选择现有大剑模型和一条轻攻击动画完成端到端验证，不在首轮批量接入整套资源。
 - 创建 Sword Overlay，负责持剑待机和移动姿势。
 - 创建 Light Attack Ability，使用数据解析后的 Montage。
 - 使用 `AnimNotifyState` 打开和关闭命中窗口。
@@ -245,10 +246,10 @@ Docs/05_tasks/melee/
 
 ## 12. 下一步
 
-阶段 1 开发文档已经建立：
+当前进入阶段 3“首把近战武器最小闭环（大剑）”。开始编码前，在以下位置建立独立教程式任务文档：
 
 ```text
-Docs/List/phase_01_gas_foundation.md
+Docs/05_tasks/melee/phase_03_melee_minimum_loop.md
 ```
 
-其范围只包含 GAS 插件与模块依赖、ASC 初始化、Gameplay Tags、Ability 授予和一个无伤害测试 Ability。后续阶段 1 开发和进度跟踪以该文档为准；通过基础验收后，再编写通用动作与装备契约文档，避免同时改造 GAS、装备、动画和伤害四条链。
+该文档只规划一把大剑和一条轻攻击的完整运行链：Native Tags、近战数据契约、动态 Ability 授予、`GA_LightAttack`、Montage、命中窗口、Sweep、GAS 伤害、编辑器接入与回归验收。阶段 1 的 `UNXGA_TestAbility` 和测试输入保留到真实轻攻击通过 GAS 冒烟测试后再清理。
