@@ -322,4 +322,4 @@ Standalone 已通过；两玩家 Listen Server 作为阶段 8 联机验收项保
 | 2.6 Action/Equipment/枪械回归 | Standalone 已通过，Listen Server 延后 |
 | 2.7 系统文档与路线图同步 | 已完成（2026-07-28） |
 
-阶段 2 已完成。下一步编写阶段 3“首把近战武器最小闭环（大剑）”任务文档；动态装备 Ability 授予、通用 ActionTag 动画解析和第一条近战命中链随真实 `GA_LightAttack` 一起实现，不提前建立无调用方框架。
+阶段 2 已完成。阶段 3 进入[首把近战武器最小闭环（大剑）](../melee/phase_03_melee_minimum_loop.md)；动态装备 Ability 授予、通用 ActionTag 动画解析和第一条近战命中链随真实 `GA_LightAttack` 一起实现，不提前建立无调用方框架。

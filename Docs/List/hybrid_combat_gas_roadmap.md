@@ -141,7 +141,7 @@ GAS 负责：
 | 1 | [GAS 基础设施](./phase_01_gas_foundation.md) | ASC 初始化、Tag 激活、Ability 授予与取消正常 | 已完成 |
 | 2 | [通用动作与装备契约](../05_tasks/GAS/phase_02_combat_action_equipment_contract.md) | 同一入口可识别近战/枪械装备，不复制两套装备状态 | 已完成 |
 | 2.5 | [Vitals、伤害与死亡基础](../05_tasks/GAS/gas_vitals_damage_death_foundation.md) | Health/Stamina、伤害、死亡、HUD 统一进入 GAS | Standalone 基线通过，专项/联机待验收 |
-| 3 | 首把近战武器最小闭环（大剑） | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 待开发 |
+| 3 | [首把近战武器最小闭环（大剑）](../05_tasks/melee/phase_03_melee_minimum_loop.md) | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 文档待审核 |
 | 4 | 魂类基础状态 | 体力、重攻击、闪避、格挡、招架、硬直 | 待开发 |
 | 5 | 连击与动画数据驱动 | 输入缓存、取消窗口、Combo 分支、Chooser/Profile 换资源 | 待开发 |
 | 6 | 枪械 GAS 适配 | Fire/Reload Ability 包装现有 ANXRangedWeapon，枪械行为不回归 | 待开发 |
@@ -246,10 +246,10 @@ Docs/05_tasks/melee/
 
 ## 12. 下一步
 
-当前进入阶段 3“首把近战武器最小闭环（大剑）”。开始编码前，在以下位置建立独立教程式任务文档：
+阶段 3“首把近战武器最小闭环（大剑）”开发文档已经建立：
 
 ```text
 Docs/05_tasks/melee/phase_03_melee_minimum_loop.md
 ```
 
-该文档只规划一把大剑和一条轻攻击的完整运行链：Native Tags、近战数据契约、动态 Ability 授予、`GA_LightAttack`、Montage、命中窗口、Sweep、GAS 伤害、编辑器接入与回归验收。阶段 1 的 `UNXGA_TestAbility` 和测试输入保留到真实轻攻击通过 GAS 冒烟测试后再清理。
+当前先审核该文档的职责边界和开发顺序。审核通过后从 3.1 Native Tags 与近战 DataAsset 契约开始；阶段 1 的 `UNXGA_TestAbility` 和测试输入保留到真实轻攻击通过 GAS 冒烟测试后再清理。
