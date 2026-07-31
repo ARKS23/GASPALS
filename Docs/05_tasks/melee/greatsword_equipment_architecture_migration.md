@@ -2,7 +2,7 @@
 
 > 关联文档：[大剑 GASPALS 基础运动扩展](./greatsword_gaspals_locomotion_extension.md)、[首把近战武器最小闭环](./phase_03_melee_minimum_loop.md)
 >
-> 当前状态：设计待审核；现有 `BP_Greatsword` 仅作为 Overlay 验证原型，不继续增加 Gameplay 逻辑
+> 当前状态：开发中；开发步骤 1–5 已完成，现有 `BP_Greatsword` 仅作为 Overlay 验证原型，不继续增加 Gameplay 逻辑
 
 ## 1. 目标
 
@@ -286,6 +286,8 @@ C++ 工作：
 - Gameplay Tag Manager 可以找到全部标签且没有重复、失效或重定向警告。
 - Rifle/Pistol 原有标签和 Chooser 结果不变化。
 
+实现结果（2026-07-28）：6 个近战稳定标签已经注册为 Native Tags，`Animation.Weapon.Sword.Greatsword` 已加入配置；重复注册与格式检查通过，UE 5.8 `GASPALSEditor Win64 Development` 完整编译和链接成功。编辑器重新打开后可在 Gameplay Tag Manager 中进行一次可视化复核。
+
 ### 开发步骤 2：新增近战数据契约
 
 新增：
@@ -314,6 +316,8 @@ C++ 工作：
 - UHT、编译和链接通过，新类型能在编辑器 Data Asset 创建菜单中找到。
 - 新增头文件不依赖 `NXRangedWeapon`、`WeaponShotTypes` 或 `WeaponPresentationComponent`。
 - Rider Solution 可以正常跳转所有新增类型。
+
+实现结果（2026-07-28）：已新增 `FNXMeleeActionDefinition` 与独立的 `UNXMeleeWeaponDataAsset`，支持 Animation Family、附着/Trace Socket、Sweep 参数、Damage Effect 和动作数组配置。动作查询采用精确 Tag 匹配；运行时检查与编辑器 Data Validation 共用同一套规则，可拒绝父级/重复 Action、空 Montage、非法数值及缺失配置。依赖边界和格式检查通过，UE 5.8 `GASPALSEditor Win64 Development` 已完成 UHT、编译和 DLL 链接；重启编辑器后可确认 Data Asset 创建菜单和中文校验信息。
 
 ### 开发步骤 3：扩展通用 Equipment 生命周期
 
@@ -352,6 +356,8 @@ C++ 工作：
 - 装备和卸装多次后 ASC 中没有重复或残留的装备 Ability。
 - 角色仍只有现有 `UWeaponComponent` 这一个实际装备组件实例。
 
+实现结果（2026-07-30）：已新增三种 Equipment Actor 表现策略；`ANXEquipmentBase` 已支持表现策略与装备期 Ability 配置。`UNXEquipmentComponent` 现在会分别解析附着和可见性，在 Authority 上以 Equipment Actor 作为 `AbilitySpec.SourceObject` 授予 Ability，并在卸装、切装、死亡及 EndPlay 时先取消、再按 Handle 移除 Spec。重复 Ability、空类、抽象类和非权威调用均有保护。格式检查、UHT、UE 5.8 `GASPALSEditor Win64 Development` 完整编译和 DLL 链接均已通过。
+
 ### 开发步骤 4：新增正式 Melee Weapon Actor
 
 新增：
@@ -386,6 +392,8 @@ C++ 工作：
 - 隐藏或可见 Actor 的 `Trace_Base/Trace_Tip` 都能随角色手部移动。
 - 编译通过且不影响 `ANXRangedWeapon` 构造和 Mesh 类型。
 
+实现结果（2026-07-30）：已新增正式 `ANXMeleeWeapon`，默认使用 `Equipment.Category.Melee`，并持有独立的 Scene Root、Static Mesh 与 `UNXMeleeWeaponDataAsset`。动作准备采用精确 Action Tag 查询；命中窗口只在配置、动作及两个 Trace Socket 全部有效时开启。Authority 在窗口期间按剑身采样上一帧到当前帧的轨迹并执行 Sphere Sweep，同一 Actor 每个窗口只广播一次 `OnMeleeHit`；该层不应用伤害或 GameplayEffect。关闭窗口、清空动作、卸装和 EndPlay 均复用同一套 Tick、轨迹缓存及命中集合清理。依赖边界检查、UHT、UE 5.8 `GASPALSEditor Win64 Development` 编译和 DLL 链接均已通过。
+
 ### 开发步骤 5：实现 Light Attack GAS 链
 
 新增：
@@ -411,6 +419,8 @@ C++ 工作：
 - 未装备大剑、装备枪械、死亡或重复攻击时 Ability 被正确拒绝。
 - Montage 中只有 NotifyState 区间产生命中，同一目标每次攻击只受伤一次。
 - 中断攻击不会留下 `Combat.State.Attacking`、Tick、命中窗口或失效委托。
+
+实现结果（2026-07-30）：已新增 `UNXGA_LightAttack` 与 `UNXAnimNotifyState_MeleeHitWindow`。轻攻击使用 `Combat.Action.Attack.Light` Asset Tag，激活期间由 GAS 持有 `Combat.State.Attacking`，并阻止攻击重入与死亡状态激活。激活前会同时校验 CurrentEquipment、`AbilitySpec.SourceObject`、DataAsset、Light Action、AnimInstance、Instant Damage Effect 以及两个 Trace Socket；配置失败不会 Commit。Ability 会先监听 Hit Window Begin/End Gameplay Event，再通过 `PlayMontageAndWait` 启动 Montage；命中事件只在 Authority 上通过 `UNXCombatEffectLibrary` 提交 GAS 伤害。正常完成、Montage 打断、外部取消、死亡和卸装最终都进入 `EndAbility()`，统一混出 Montage、解绑 `OnMeleeHit`、关闭 Hit Window 并清空动作。NotifyState 只向 Mesh Owner 发送 Gameplay Event，不查询武器或应用伤害。DataAsset 校验已补充 Instant GameplayEffect 契约；UHT、UE 5.8 `GASPALSEditor Win64 Development` 编译及 DLL 链接均已通过。
 
 ### 开发步骤 6：创建正式编辑器资产
 
@@ -489,11 +499,11 @@ C++ 工作：
 
 | 开发步骤 | 状态 |
 |---|---|
-| 1. 注册近战与动画标签 | 待开发 |
-| 2. 新增近战数据契约 | 待开发 |
-| 3. 扩展通用 Equipment 生命周期 | 待开发 |
-| 4. 新增正式 Melee Weapon Actor | 待开发 |
-| 5. 实现 Light Attack GAS 链 | 待开发 |
+| 1. 注册近战与动画标签 | 已完成（2026-07-28） |
+| 2. 新增近战数据契约 | 已完成（2026-07-28） |
+| 3. 扩展通用 Equipment 生命周期 | 已完成（2026-07-30） |
+| 4. 新增正式 Melee Weapon Actor | 已完成（2026-07-30） |
+| 5. 实现 Light Attack GAS 链 | 已完成（2026-07-30） |
 | 6. 创建正式编辑器资产 | 待开发 |
 | 7. 角色、Overlay 与输入接入 | 待开发 |
 | 8. 替换原型、回归并同步文档 | 待测试 |

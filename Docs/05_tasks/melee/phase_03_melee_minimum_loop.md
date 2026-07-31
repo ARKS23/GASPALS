@@ -4,7 +4,7 @@
 >
 > 前置文档：[通用战斗动作与装备契约](../GAS/phase_02_combat_action_equipment_contract.md)、[GAS 属性、伤害与死亡基础](../GAS/gas_vitals_damage_death_foundation.md)
 >
-> 当前状态：设计初稿待审核；审核通过后先完成 C++ 最小链，再进行编辑器资源接入
+> 当前状态：开发中；3.1–3.4 已完成，下一步进行大剑编辑器资源与角色输入接入
 
 ## 1. 目标与边界
 
@@ -290,10 +290,10 @@ IA_LightAttack Started
 
 | 顺序 | 工作项 | 状态 |
 |---|---|---|
-| 3.1 | Native Tags 与近战 DataAsset 契约 | 待开发 |
-| 3.2 | Equipment Ability 授予/移除与 Actor 表现策略 | 待开发 |
-| 3.3 | ANXMeleeWeapon 与 Sweep | 待开发 |
-| 3.4 | GA_LightAttack 与 AnimNotifyState | 待开发 |
+| 3.1 | Native Tags 与近战 DataAsset 契约 | 已完成（2026-07-28） |
+| 3.2 | Equipment Ability 授予/移除与 Actor 表现策略 | 已完成（2026-07-30） |
+| 3.3 | ANXMeleeWeapon 与 Sweep | 已完成（2026-07-30） |
+| 3.4 | GA_LightAttack 与 AnimNotifyState | 已完成（2026-07-30） |
 | 3.5 | BP_Greatsword、Montage、Slot、Overlay 和输入接入 | 待开发 |
 | 3.6 | Standalone 验收、枪械回归与系统文档 | 待测试 |
 

@@ -20,6 +20,16 @@ FName ANXEquipmentBase::GetDefaultAttachSocketName() const
 	return NAME_None;
 }
 
+ENXEquipmentPresentationPolicy ANXEquipmentBase::GetEquipmentPresentationPolicy() const
+{
+	return PresentationPolicy;
+}
+
+const TArray<TSubclassOf<UGameplayAbility>>& ANXEquipmentBase::GetGrantedAbilityClasses() const
+{
+	return GrantedAbilityClasses;
+}
+
 ACharacter* ANXEquipmentBase::GetOwningCharacter() const
 {
 	return bIsEquipped ? Cast<ACharacter>(GetOwner()) : nullptr;

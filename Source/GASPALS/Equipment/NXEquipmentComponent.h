@@ -2,10 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayAbilitySpecHandle.h"
 #include "NXEquipmentComponent.generated.h"
 
 class ANXEquipmentBase;
 class UNXEquipmentComponent;
+class UNXVitalsComponent;
+class UAbilitySystemComponent;
 class USkeletalMeshComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(
@@ -72,12 +75,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="NexAur|Equipment")
 	FName EquipmentAttachSocketName = NAME_None;
 
-	/** 关闭时装备 Actor 只承担 Gameplay，并由现有 Overlay 等系统显示视觉模型。 */
+	/** 仅供 UseComponentDefault 使用；关闭时 Actor 隐藏且不附着，保持现有枪械行为。 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="NexAur|Equipment")
 	bool bAttachEquipmentActorToOwner = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="NexAur|Equipment")
 	bool bDestroyCurrentEquipmentOnUnequip = true;
+
+	/** 拥有者死亡时走正式卸装链，确保装备 Ability 和运行状态全部清理。 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="NexAur|Equipment")
+	bool bUnequipOnOwnerDeath = true;
 
 	/** 唯一运行时装备引用；兼容层必须通过 GetCurrentEquipment() 查询并转换类型。 */
 	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category="NexAur|Equipment")
@@ -90,8 +97,31 @@ protected:
 	virtual void HandleCurrentEquipmentChanged(ANXEquipmentBase* OldEquipment, ANXEquipmentBase* NewEquipment);
 
 private:
+	UFUNCTION()
+	void HandleOwnerDeath(UNXVitalsComponent* InVitalsComponent, AActor* EffectInstigator, AActor* EffectCauser);
+
 	ANXEquipmentBase* SpawnEquipment(TSubclassOf<ANXEquipmentBase> EquipmentClass) const;
-	void ApplyLogicalEquipmentPresentation(ANXEquipmentBase* Equipment) const;
+	void ApplyEquipmentPresentation(ANXEquipmentBase* Equipment) const;
+	void ResolveEquipmentPresentation(const ANXEquipmentBase* Equipment, bool& bOutShouldAttach, bool& bOutShouldBeVisible) const;
 	FName ResolveAttachSocketName(const ANXEquipmentBase* Equipment) const;
+	UAbilitySystemComponent* FindOwnerAbilitySystemComponent() const;
+	void GrantEquipmentAbilities(ANXEquipmentBase* Equipment);
+	void CancelAndRemoveGrantedEquipmentAbilities();
+	void BindOwnerDeathCleanup();
+	void UnbindOwnerDeathCleanup();
+	bool IsOwnerDead() const;
 	void BroadcastCurrentEquipmentChanged(ANXEquipmentBase* OldEquipment, ANXEquipmentBase* NewEquipment);
+
+	/** 句柄只记录当前装备本次授予的 Spec，不包含 PlayerState 的永久 Startup Abilities。 */
+	UPROPERTY(Transient)
+	TArray<FGameplayAbilitySpecHandle> GrantedAbilityHandles;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UAbilitySystemComponent> GrantedAbilitySystemComponent;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<ANXEquipmentBase> GrantedAbilitySource;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNXVitalsComponent> VitalsComponent;
 };

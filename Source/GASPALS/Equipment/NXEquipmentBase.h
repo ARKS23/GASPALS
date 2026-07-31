@@ -3,9 +3,11 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayTagContainer.h"
+#include "NXEquipmentTypes.h"
 #include "NXEquipmentBase.generated.h"
 
 class ACharacter;
+class UGameplayAbility;
 
 /**
  * NexAur 所有可装备 Actor 的最小基类。
@@ -32,6 +34,13 @@ public:
 	UFUNCTION(BlueprintPure, Category="NexAur|Equipment")
 	virtual FName GetDefaultAttachSocketName() const;
 
+	/** 返回该装备 Actor 的附着和可见性策略。 */
+	UFUNCTION(BlueprintPure, Category="NexAur|Equipment|Presentation")
+	ENXEquipmentPresentationPolicy GetEquipmentPresentationPolicy() const;
+
+	/** 返回仅在该装备生效期间授予拥有者的 Ability 配置。 */
+	const TArray<TSubclassOf<UGameplayAbility>>& GetGrantedAbilityClasses() const;
+
 	/** 当前装备拥有者是 Character 时返回该角色，否则返回 nullptr。 */
 	UFUNCTION(BlueprintPure, Category="NexAur|Equipment")
 	ACharacter* GetOwningCharacter() const;
@@ -56,6 +65,14 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="NexAur|Equipment", meta=(Categories="Equipment.Category"))
 	FGameplayTag EquipmentCategory;
+
+	/** 默认策略保留现有组件行为，新装备可以独立选择附着可见或附着隐藏。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="NexAur|Equipment|Presentation")
+	ENXEquipmentPresentationPolicy PresentationPolicy = ENXEquipmentPresentationPolicy::UseComponentDefault;
+
+	/** 仅在 Authority 上授予；卸装时由 Equipment Component 按 Spec Handle 精确移除。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="NexAur|Equipment|Abilities")
+	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilityClasses;
 
 private:
 	// 生命周期状态独立于 Actor Owner：Spawn 时可以先设置 Owner，再正式提交装备。
