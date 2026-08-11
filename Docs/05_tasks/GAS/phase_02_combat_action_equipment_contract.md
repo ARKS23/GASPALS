@@ -149,7 +149,7 @@ Combat.Action.Attack.Light
 -> Montage / Hit Window / Sweep
 ```
 
-在阶段 3 验收前，保留阶段 1 的 `T/Y` 测试入口，避免失去最小 GAS 冒烟测试。
+阶段 2 开发期间曾保留阶段 1 的 `T/Y` 测试入口。阶段 3 的正式轻攻击通过同等 GAS 冒烟测试后，该临时入口与测试 Ability 已删除。
 
 ## 5. C++ 开发步骤
 
@@ -170,7 +170,7 @@ Source/GASPALS/Character/NXCharacterBase.h/.cpp
 4. 不新增输入组件；PlayerController、蓝图和 AI 都通过角色入口提交动作。
 5. 暂不添加未来攻击、闪避等叶节点，随功能逐项增加。
 
-验收：`Combat.Action.Test` 可以通过新入口激活测试 Ability；无效 Tag、`Combat.Action` 根 Tag 和 Animation Tag 不能进入战斗动作链。
+现行验收：`Combat.Action.Attack.Light` 可以通过统一入口激活当前装备授予的 Ability；无效 Tag、`Combat.Action` 根 Tag 和 Animation Tag 不能进入战斗动作链。
 
 ### 5.2 新增通用 Equipment Actor
 
@@ -284,7 +284,7 @@ Source/GASPALS/UI/CombatHUDWidgetBase.h/.cpp
 
 ### 8.2 Action 契约
 
-- [x] `RequestCombatAction(Combat.Action.Test)` 可以激活测试 Ability。
+- [x] `RequestCombatAction(Combat.Action.Attack.Light)` 可以激活当前装备授予的轻攻击 Ability。
 - [x] 无效 Tag、根 Tag、State Tag 和 Animation Tag 会在入口校验中被拒绝。
 - [x] Action 激活失败不会修改装备、状态或表现。
 - [x] Standalone 冒烟测试没有重复或交叉 ASC。
@@ -322,4 +322,4 @@ Standalone 已通过；两玩家 Listen Server 作为阶段 8 联机验收项保
 | 2.6 Action/Equipment/枪械回归 | Standalone 已通过，Listen Server 延后 |
 | 2.7 系统文档与路线图同步 | 已完成（2026-07-28） |
 
-阶段 2 已完成。阶段 3 进入[首把近战武器最小闭环（大剑）](../melee/phase_03_melee_minimum_loop.md)；动态装备 Ability 授予、通用 ActionTag 动画解析和第一条近战命中链随真实 `GA_LightAttack` 一起实现，不提前建立无调用方框架。
+阶段 2 已完成。阶段 3 的[首把近战武器最小闭环](../melee/phase_03_melee_minimum_loop.md)也已通过回归；动态装备 Ability 授予、统一 ActionTag 入口和第一条近战命中链均已有正式调用方。

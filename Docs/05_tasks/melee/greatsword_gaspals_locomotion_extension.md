@@ -2,11 +2,13 @@
 
 > 关联文档：[首把近战武器最小闭环（大剑）](./phase_03_melee_minimum_loop.md)
 >
-> 当前状态：方案待审核；优先完成 Greatsword Overlay，不提前重建 Motion Matching 数据库
+> 当前状态：Overlay 路线已由 Nodachi 等价资产完成并通过回归（2026-08-11）；尚未建立专用 Motion Matching 数据库
 
 ## 1. 目标与边界
 
 本任务让角色在装备大剑后拥有稳定的持剑待机和移动姿态，同时继续复用 GASPALS 已有的脚步、起停、转向、跳跃和 Traversal。
+
+实施说明：本文最初按 Greatsword 资源编写，最终用 Nodachi Overlay、Montage 和装备动画族完成同一架构验证。下文 Greatsword 资产名保留为历史教程示例，长期数据库方案应改用项目侧 Nodachi 命名。
 
 目标结构：
 
@@ -204,11 +206,11 @@ Equipment/Stance Tag
 
 | 顺序 | 工作项 | 状态 |
 |---|---|---|
-| 1 | 创建项目侧 Greatsword Overlay 目录与 AnimBP | 待开发 |
-| 2 | 制作 Idle/Walk/Run/Sprint/Crouch Pose 与 Layering 曲线 | 待开发 |
-| 3 | 创建 `DA_NXOverlay_Greatsword` 并校准左手 IK | 待开发 |
-| 4 | 扩展 `Enum_OverlayPose` 和 `CHT_OverlayPoses` | 待开发 |
-| 5 | 装备 Animation Family 到 Overlay 的切换接入 | 待开发 |
-| 6 | 移动、切装、Montage 和枪械回归验收 | 待测试 |
+| 1 | 创建项目侧近战 Overlay 目录与 AnimBP | 已完成（Nodachi，2026-08-11） |
+| 2 | 制作持续持刀 Pose 与 Layering 曲线 | 已完成（Nodachi，2026-08-11） |
+| 3 | 创建 Overlay DataAsset 并校准持握表现 | 已完成（Nodachi，2026-08-11） |
+| 4 | 扩展 `Enum_OverlayPose` 和 `CHT_OverlayPoses` | 已完成（2026-08-11） |
+| 5 | 装备 Animation Family 到 Overlay 的切换接入 | 已完成（2026-08-11） |
+| 6 | 移动、切装、Montage 和枪械回归验收 | 已通过（2026-08-11） |
 
-严格按 `Overlay 资产 -> IK/武器显示 -> 装备切换 -> 攻击 Montage -> 回归测试` 推进。第一版稳定后，再决定是否增加方向性 Overlay 和大剑专属 Motion Matching。
+第一版已经按 `Overlay 资产 -> 持握/武器显示 -> 装备切换 -> 攻击 Montage -> 回归测试` 完成。后续若建立 Nodachi 专用 Motion Matching，应新建项目侧任务文档，不直接覆盖 GASPALS 默认 Pose Search Database。

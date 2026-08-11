@@ -74,7 +74,7 @@ bool ANXCharacterBase::RequestCombatAction(FGameplayTag ActionTag)
 		return false;
 	}
 
-	// 根标签只承担分类契约；必须传入 Combat.Action.Test 等具体动作，避免一次请求匹配多个 Ability。
+	// 根标签只承担分类契约；必须传入 Combat.Action.Attack.Light 等具体动作，避免一次请求匹配多个 Ability。
 	if (ActionTag == NXGameplayTags::Combat_Action || !ActionTag.MatchesTag(NXGameplayTags::Combat_Action))
 	{
 		UE_LOG(LogNXCharacterAbilitySystem, Warning,

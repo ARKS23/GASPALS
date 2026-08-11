@@ -18,7 +18,7 @@
 ## 2. 装备链
 
 ```text
-角色请求 EquipEquipment(BP_Notachi_Melee)
+角色请求 EquipEquipment(BP_Nodachi_Melee)
 -> UNXEquipmentComponent 生成并设置 CurrentEquipment
 -> ANXMeleeWeapon::NotifyEquipped
 -> 根据 GrantedAbilityClasses 向 PlayerState ASC 授予 UNXGA_LightAttack
@@ -71,7 +71,8 @@ flowchart TD
 
 ## 6. 后续工作
 
-1. 清理阶段 1 的 `UNXGA_TestAbility`、测试 Tags 和临时输入。
-2. 将资产名 `BP_Notachi_Melee` 统一为 `BP_Nodachi_Melee` 并修复 Redirectors。
-3. 设计连击、输入缓存、Stamina Cost、重攻击与格挡。
+1. 为近战动作接入 Stamina Cost、恢复 Effect 和精力不足限制。
+2. 设计闪避、无敌窗口、格挡与招架的 Ability 生命周期。
+3. 设计连击、输入缓存、取消窗口和重攻击。
 4. 在基础链保持稳定后，再为 Nodachi 扩展专用 Pose Search Database。
+5. `Content/Nodachi` 资源包整理已延期；迁移 `Sword_Nodachi` 的材质依赖后再决定资源提交策略。

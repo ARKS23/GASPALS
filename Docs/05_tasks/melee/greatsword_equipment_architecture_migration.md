@@ -8,7 +8,7 @@
 
 把当前“使用枪械父类临时显示大剑”的原型迁移为正式近战装备，使枪械和近战共享同一套 Equipment 生命周期，但各自拥有独立的数据、Mesh、输入和战斗实现。
 
-实施说明：架构最初以 Greatsword 为验证对象，最终使用 `BP_Notachi_Melee` 与 `PDA_Melee_Nodachi` 完成正式编辑器接入和回归。两者都遵循 `ANXMeleeWeapon + UNXMeleeWeaponDataAsset` 契约，因此不改变本文的架构结论；`Notachi` 拼写将在后续资产整理时统一为 `Nodachi`。
+实施说明：架构最初以 Greatsword 为验证对象，最终使用 `BP_Nodachi_Melee` 与 `PDA_Melee_Nodachi` 完成正式编辑器接入和回归。两者都遵循 `ANXMeleeWeapon + UNXMeleeWeaponDataAsset` 契约，因此不改变本文的架构结论。对外资产名已统一为 `Nodachi`；历史动画族 Tag 与 Overlay 枚举值的 `Notachi` 拼写保留到后续 UE 资产迁移任务。
 
 目标结构：
 

@@ -11,14 +11,8 @@ namespace NXGameplayTags
 	/** 大剑等近战装备使用的基础轻攻击动作。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_Action_Attack_Light);
 
-	/** 阶段 1 测试 Ability 的动作标签。 */
-	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_Action_Test);
-
 	/** 角色正在执行攻击动作；用于阻止不允许并行的战斗行为。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_State_Attacking);
-
-	/** 阶段 1 测试 Ability 激活期间持有的状态标签。 */
-	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_State_TestAbilityActive);
 
 	/** 角色已经死亡；后续由死亡状态 GameplayEffect 持有该标签。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_State_Dead);

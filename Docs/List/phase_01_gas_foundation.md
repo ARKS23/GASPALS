@@ -3,6 +3,8 @@
 > 上层路线图：[hybrid_combat_gas_roadmap.md](./hybrid_combat_gas_roadmap.md)
 >
 > 当前状态：已完成（ASC、Owner/Avatar、Ability 生命周期和 Standalone 枪械/GASPALS 回归通过；联机专项延后）
+>
+> 历史说明：本文保留阶段 1 测试流程供学习复盘；其中 `UNXGA_TestAbility`、测试 Tags 和 T/Y 输入已在阶段 3 正式轻攻击通过后于 2026-08-11 删除。
 
 ## 1. 阶段目标
 
@@ -436,4 +438,4 @@ Docs/List/hybrid_combat_gas_roadmap.md
 3. [GAS 基础运行链](../system/gas_foundation_data_flow.md) 已记录实际 Owner/Avatar、初始化、Ability 激活和清理流程。
 4. 阶段 2“通用动作与装备契约”已开发并通过 Standalone 回归。
 
-阶段 1 的 `UNXGA_TestAbility` 和临时测试输入继续保留到阶段 3 的真实 `GA_LightAttack` 跑通，再统一清理测试资产。
+阶段 1 的测试脚手架已在阶段 3 的真实 `GA_LightAttack` 完整通过后删除。现行 GAS 调用入口与生命周期见 [GAS 基础运行链](../system/gas_foundation_data_flow.md) 和 [近战轻攻击运行调用链](../system/melee_light_attack_data_flow.md)。

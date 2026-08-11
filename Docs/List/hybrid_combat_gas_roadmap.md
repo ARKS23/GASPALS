@@ -22,7 +22,7 @@
 - `WeaponPresentationComponent` 的动画、音效、VFX、Tracer、Impact 和后坐表现。
 - `WeaponAnimationProfile + Chooser` 数据驱动动画选择。
 - GASPALS Rifle/Pistol Overlay、手部 IK 与 `NXWeaponAction` Slot。
-- `ANXPlayerState` 持有 ASC，`ANXCharacterBase` 作为 Avatar，并已跑通测试 Ability。
+- `ANXPlayerState` 持有 ASC，`ANXCharacterBase` 作为 Avatar，并已跑通正式轻攻击 Ability。
 - Native Gameplay Tags、ActionTag 请求入口和通用 Equipment Actor/Component 契约。
 - GAS Vitals AttributeSet、伤害 Execution、死亡状态、HUD 和测试目标闭环。
 - Gameplay Tags 和 Chooser 模块依赖。
@@ -31,8 +31,8 @@
 
 - `ANXRangedWeapon`、`UWeaponDataAsset` 和 `UWeaponComponent` 仍以枪械语义为主。
 - 动画 Cue 固定为 Fire/Reload/Equip/Unequip，不适合持续增加近战动作。
-- 当前只有测试 Ability，近战动作和枪械 Fire/Reload 尚未迁移为 GameplayAbility。
-- 体力已有 Attribute，但消耗、恢复和 HUD 尚未形成玩法闭环。
+- 当前只有轻攻击进入正式 GameplayAbility；重攻击、闪避、格挡和枪械 Fire/Reload 尚未迁移。
+- 体力已有 Attribute 和 HUD，但动作消耗、恢复与精力不足限制尚未形成玩法闭环。
 - 重生和联机权威、预测、复制尚未验收。
 
 枪械 Fire 动画美术打磨暂缓，但现有枪械链必须作为后续回归基线保留。
@@ -141,8 +141,8 @@ GAS 负责：
 | 1 | [GAS 基础设施](./phase_01_gas_foundation.md) | ASC 初始化、Tag 激活、Ability 授予与取消正常 | 已完成 |
 | 2 | [通用动作与装备契约](../05_tasks/GAS/phase_02_combat_action_equipment_contract.md) | 同一入口可识别近战/枪械装备，不复制两套装备状态 | 已完成 |
 | 2.5 | [Vitals、伤害与死亡基础](../05_tasks/GAS/gas_vitals_damage_death_foundation.md) | Health/Stamina、伤害、死亡、HUD 统一进入 GAS | Standalone 基线通过，专项/联机待验收 |
-| 3 | [首把近战武器最小闭环（大剑）](../05_tasks/melee/phase_03_melee_minimum_loop.md) | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 文档待审核 |
-| 4 | 魂类基础状态 | 体力、重攻击、闪避、格挡、招架、硬直 | 待开发 |
+| 3 | [首把近战武器最小闭环](../05_tasks/melee/phase_03_melee_minimum_loop.md) | 装备、轻攻击 Montage、命中窗口、Sweep、单次伤害 | 已完成（2026-08-11） |
+| 4 | [魂类基础状态（4A：Stamina 动作资源）](../05_tasks/melee/phase_04a_stamina_action_resource_loop.md) | 体力、重攻击、闪避、格挡、招架、硬直 | 4A 文档待审核 |
 | 5 | 连击与动画数据驱动 | 输入缓存、取消窗口、Combo 分支、Chooser/Profile 换资源 | 待开发 |
 | 6 | 枪械 GAS 适配 | Fire/Reload Ability 包装现有 ANXRangedWeapon，枪械行为不回归 | 待开发 |
 | 7 | 高级 Attribute/Effect | Poise、抗性、Buff/Debuff 进入 AttributeSet/GameplayEffect | 待开发 |
@@ -167,16 +167,14 @@ GAS 负责：
 - 保留 `UWeaponComponent` 枪械 API 作为迁移适配，并确保只有一份 Current Equipment 状态。
 - `CombatComponent` 冻结新功能并保留现有枪械链；通用动画解析随阶段 3 的真实轻攻击需求接入。
 
-### 阶段 3：首把近战武器最小闭环（大剑）
+### 阶段 3：首把近战武器最小闭环
 
-- 当前已导入的模型和动画属于 Greatsword 资源，阶段命名、Tag、Profile 与资产目录统一按“大剑”表达，不再误标为单手剑。
-- 只选择现有大剑模型和一条轻攻击动画完成端到端验证，不在首轮批量接入整套资源。
-- 创建 Sword Overlay，负责持剑待机和移动姿势。
-- 创建 Light Attack Ability，使用数据解析后的 Montage。
-- 使用 `AnimNotifyState` 打开和关闭命中窗口。
-- 武器在窗口内对起止 Socket 做 Sweep，并对同一目标去重。
-- 命中后通过统一 GAS 伤害入口应用 Damage GameplayEffect。
-- 动画中断、死亡或卸装必须关闭命中窗口并清理状态。
+- 最终由 Nodachi 模型、Overlay 和一条 Root Motion 攻击 Montage 完成端到端验证。
+- `UNXGA_LightAttack` 使用当前装备 DataAsset 解析动作，不绑定具体武器类型。
+- `AnimNotifyState` 控制命中窗口，武器 Actor 在窗口内执行多点 Sweep 和单窗口目标去重。
+- 命中通过统一 GAS 伤害入口进入 Health、Dead 和 HUD 链。
+- Montage 完成/中断、切装、卸装和死亡均能清理 Ability、窗口、Tick 与委托。
+- Rifle/Pistol、HUD、Overlay、移动和枪械表现已完成回归。
 
 ### 阶段 4-5：魂类战斗扩展
 
@@ -246,10 +244,13 @@ Docs/05_tasks/melee/
 
 ## 12. 下一步
 
-阶段 3“首把近战武器最小闭环（大剑）”开发文档已经建立：
+阶段 3 已完成，实际运行链记录在：
 
 ```text
 Docs/05_tasks/melee/phase_03_melee_minimum_loop.md
+Docs/system/melee_light_attack_data_flow.md
 ```
 
-当前先审核该文档的职责边界和开发顺序。审核通过后从 3.1 Native Tags 与近战 DataAsset 契约开始；阶段 1 的 `UNXGA_TestAbility` 和测试输入保留到真实轻攻击通过 GAS 冒烟测试后再清理。
+阶段 1 的 `UNXGA_TestAbility`、测试 Tags 和临时输入已经清理。下一阶段先建立 Stamina 动作资源闭环，再开发闪避与无敌窗口；重攻击、格挡、招架和连击在资源与动作互斥规则稳定后依次接入。
+
+`Content/Nodachi` 原始资源包暂不整理。专用 Pose Search Database 作为独立动画表现任务，不阻塞阶段 4 的战斗逻辑开发。

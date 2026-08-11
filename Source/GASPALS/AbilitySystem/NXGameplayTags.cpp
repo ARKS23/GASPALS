@@ -15,21 +15,9 @@ namespace NXGameplayTags
 	);
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		Combat_Action_Test,
-		"Combat.Action.Test",
-		"阶段 1 GAS 生命周期测试：用于按动作标签激活测试 Ability；移除临时测试入口后可删除。"
-	);
-
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Combat_State_Attacking,
 		"Combat.State.Attacking",
 		"角色正在执行攻击动作；用于动作互斥、中断和表现查询。"
-	);
-
-	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
-		Combat_State_TestAbilityActive,
-		"Combat.State.TestAbilityActive",
-		"阶段 1 GAS 生命周期测试：标记测试 Ability 正处于激活状态；移除测试 Ability 后可删除。"
 	);
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(

@@ -2,7 +2,7 @@
 
 > 文档类型：现行系统复盘，不是待实现方案
 >
-> 同步日期：2026-07-28
+> 同步日期：2026-08-11
 
 ## 1. Owner、Avatar 与数据权威
 
@@ -62,7 +62,7 @@ flowchart TD
 -> ActivationOwnedTags 自动移除
 ```
 
-当前 `UNXGA_TestAbility` 使用 `Combat.Action.Test` 作为 Asset Tag，激活期间持有 `Combat.State.TestAbilityActive`。它只用于 GAS 冒烟测试，将在 `GA_LightAttack` 完成同等验证后清理。
+阶段 1 曾使用 `UNXGA_TestAbility` 验证上述通用入口。阶段 3 的 `UNXGA_LightAttack` 已完成同等生命周期、状态清理和装备期 Ability 授予验证，因此测试 Ability、测试 Tags 和临时输入已于 2026-08-11 删除。当前正式调用示例为 `Combat.Action.Attack.Light`。
 
 ## 4. Vitals 观察链
 
@@ -93,8 +93,8 @@ Source/GASPALS/Player/NXPlayerState.h/.cpp
 Source/GASPALS/Character/NXCharacterBase.h/.cpp
   PossessedBy / OnRep_PlayerState / RequestCombatAction / CancelAbilitiesByTag
 
-Source/GASPALS/AbilitySystem/Abilities/NXGA_TestAbility.h/.cpp
-  Asset Tag / ActivationOwnedTags / ActivateAbility / EndAbility
+Source/GASPALS/AbilitySystem/Abilities/NXGA_LightAttack.h/.cpp
+  Asset Tag / ActivationOwnedTags / Montage Task / Hit Window / EndAbility
 
 Source/GASPALS/AbilitySystem/Vitals/NXVitalsComponent.h/.cpp
   InitializeWithAbilitySystem / UninitializeFromAbilitySystem

@@ -11,7 +11,7 @@
 本阶段使用一件正式近战武器和一条轻攻击动画跑通第一条真实近战链。C++ 契约不绑定具体武器类型，当前验收资产为 Nodachi：
 
 ```text
-装备 BP_Notachi_Melee（当前资产名，后续统一为 BP_Nodachi_Melee）
+装备 BP_Nodachi_Melee
 -> 动态获得 GA_LightAttack
 -> RequestCombatAction(Combat.Action.Attack.Light)
 -> 播放大剑攻击 Montage
@@ -296,7 +296,10 @@ IA_LightAttack Started
 | 3.4 | GA_LightAttack 与 AnimNotifyState | 已完成（2026-07-30） |
 | 3.5 | 正式近战 BP、Montage、Slot、Overlay 和输入接入 | 已完成（2026-08-11） |
 | 3.6 | Standalone 验收、枪械回归与系统文档 | 已完成（2026-08-11） |
+| 3.7 | 删除 GAS 测试脚手架、统一项目侧 Nodachi 资产名并同步路线图 | 已完成（2026-08-11） |
 
-阶段 3 已按 `3.1 -> 3.2 -> 3.3 -> 3.4 -> 3.5 -> 3.6` 完成。最终运行调用链见 [近战轻攻击运行调用链](../../system/melee_light_attack_data_flow.md)。
+阶段 3 已按 `3.1 -> 3.2 -> 3.3 -> 3.4 -> 3.5 -> 3.6 -> 3.7` 完成。最终运行调用链见 [近战轻攻击运行调用链](../../system/melee_light_attack_data_flow.md)。
 
-后续收尾项：确认不再需要阶段 1 GAS 冒烟基线后，单独删除 `UNXGA_TestAbility`、`Combat.Action.Test`、`Combat.State.TestAbilityActive` 及临时 T/Y 测试输入；该清理不影响本阶段正式轻攻击链的验收结论。
+资源延期项：本阶段不整理 `Content/Nodachi` 原始资源包。当前项目侧 `Sword_Nodachi` 仍引用 `/Game/Nodachi/Demo/Material/M_Asset`，后续处理资源边界时再迁移材质并复查依赖。
+
+命名延期项：对外资产名已统一为 `Nodachi`，但现有 Overlay 枚举值和动画族 Tag 仍保存历史拼写 `Notachi`。这两个标识参与蓝图和 Chooser 匹配，必须在 UE 编辑器内连同 DataAsset、蓝图字面量和 Redirector 一次性迁移，不能只修改 `DefaultGameplayTags.ini`。
