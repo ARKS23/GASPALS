@@ -21,6 +21,12 @@ namespace NXGameplayTags
 	);
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Combat_State_StaminaRecoveryBlocked,
+		"Combat.State.StaminaRecoveryBlocked",
+		"角色暂时不能恢复精力；由动作消耗后的恢复延迟 GameplayEffect 持有。"
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Combat_State_Dead,
 		"Combat.State.Dead",
 		"角色已经死亡；用于阻止战斗动作、治疗和其他只允许存活角色执行的逻辑。"
@@ -36,6 +42,12 @@ namespace NXGameplayTags
 		Combat_Event_HitWindow_End,
 		"Combat.Event.HitWindow.End",
 		"近战动画离开有效命中窗口时发送的 Gameplay Event。"
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Data_Cost_Stamina,
+		"Data.Cost.Stamina",
+		"SetByCaller 数值标签：向动作消耗 GameplayEffect 传递精力变化量。"
 	);
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(

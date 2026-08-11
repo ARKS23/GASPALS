@@ -150,6 +150,11 @@ bool UNXMeleeWeaponDataAsset::ValidateMeleeWeaponData(TArray<FText>* OutErrors) 
 			AddError(FText::Format(LOCTEXT("InvalidBaseDamage", "Actions[{0}].BaseDamage 必须是非负有限数值。"), IndexText));
 		}
 
+		if (!FMath::IsFinite(Action.StaminaCost) || Action.StaminaCost < 0.0f)
+		{
+			AddError(FText::Format(LOCTEXT("InvalidStaminaCost", "Actions[{0}].StaminaCost 必须是非负有限数值。"), IndexText));
+		}
+
 		if (!FMath::IsFinite(Action.MontagePlayRate) || Action.MontagePlayRate <= 0.0f)
 		{
 			AddError(FText::Format(LOCTEXT("InvalidMontagePlayRate", "Actions[{0}].MontagePlayRate 必须是大于 0 的有限数值。"), IndexText));

@@ -14,6 +14,9 @@ namespace NXGameplayTags
 	/** 角色正在执行攻击动作；用于阻止不允许并行的战斗行为。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_State_Attacking);
 
+	/** 角色暂时不能恢复精力；由恢复延迟 GameplayEffect 持有。 */
+	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_State_StaminaRecoveryBlocked);
+
 	/** 角色已经死亡；后续由死亡状态 GameplayEffect 持有该标签。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_State_Dead);
 
@@ -22,6 +25,9 @@ namespace NXGameplayTags
 
 	/** 动画离开近战有效命中窗口时发送的 Gameplay Event。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Combat_Event_HitWindow_End);
+
+	/** 通过 SetByCaller 传入动作消耗 GameplayEffect 的精力变化量。 */
+	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Cost_Stamina);
 
 	/** 通过 SetByCaller 传入伤害 GameplayEffect 的基础伤害值。 */
 	GASPALS_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Base);

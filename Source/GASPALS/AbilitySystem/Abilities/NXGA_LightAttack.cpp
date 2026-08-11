@@ -77,16 +77,6 @@ void UNXGA_LightAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 		return;
 	}
 
-	// 先完成全部配置校验和动作准备，再提交 Cost/Cooldown，失败动作不会消耗资源。
-	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
-	{
-		UE_LOG(LogNXLightAttack, Warning, TEXT("轻攻击 Commit 失败，已取消。Weapon=%s。"), *GetNameSafe(Weapon));
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-		return;
-	}
-
-	Weapon->OnMeleeHit.AddUniqueDynamic(this, &UNXGA_LightAttack::HandleMeleeHit);
-
 	UAbilityTask_WaitGameplayEvent* BeginWindowTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
 		this, NXGameplayTags::Combat_Event_HitWindow_Begin, nullptr, false, true);
 	UAbilityTask_WaitGameplayEvent* EndWindowTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(
@@ -106,6 +96,16 @@ void UNXGA_LightAttack::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	MontageTask->OnCompleted.AddDynamic(this, &UNXGA_LightAttack::HandleMontageCompleted);
 	MontageTask->OnInterrupted.AddDynamic(this, &UNXGA_LightAttack::HandleMontageCancelled);
 	MontageTask->OnCancelled.AddDynamic(this, &UNXGA_LightAttack::HandleMontageCancelled);
+
+	// 任务已完整创建并绑定后再提交资源；Commit 失败时任务尚未启动，由 EndAbility 统一销毁。
+	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
+	{
+		UE_LOG(LogNXLightAttack, Warning, TEXT("轻攻击 Commit 失败，已取消。Weapon=%s。"), *GetNameSafe(Weapon));
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
+	Weapon->OnMeleeHit.AddUniqueDynamic(this, &UNXGA_LightAttack::HandleMeleeHit);
 
 	// 先监听 Gameplay Event，再启动 Montage，避免极短动画在监听建立前发出第一个 Notify。
 	BeginWindowTask->ReadyForActivation();
@@ -160,6 +160,24 @@ void UNXGA_LightAttack::EndAbility(const FGameplayAbilitySpecHandle Handle,
 	// Super 负责结束所有 AbilityTask，并自动移除 Combat.State.Attacking。
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 	bCleanupInProgress = false;
+}
+
+bool UNXGA_LightAttack::TryGetStaminaCost(const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo, float& OutStaminaCost) const
+{
+	OutStaminaCost = 0.0f;
+
+	ANXMeleeWeapon* Weapon = nullptr;
+	const FNXMeleeActionDefinition* Action = nullptr;
+	FString FailureReason;
+	if (!ResolveAttackContext(Handle, ActorInfo, Weapon, Action, FailureReason))
+	{
+		UE_LOG(LogNXLightAttack, Warning, TEXT("轻攻击无法解析精力消耗：%s"), *FailureReason);
+		return false;
+	}
+
+	OutStaminaCost = Action->StaminaCost;
+	return true;
 }
 
 bool UNXGA_LightAttack::ResolveAttackContext(const FGameplayAbilitySpecHandle Handle,
@@ -229,6 +247,12 @@ bool UNXGA_LightAttack::ResolveAttackContext(const FGameplayAbilitySpecHandle Ha
 	if (!FMath::IsFinite(Action->BaseDamage) || Action->BaseDamage <= 0.0f)
 	{
 		OutFailureReason = TEXT("轻攻击 BaseDamage 必须大于 0。");
+		return false;
+	}
+
+	if (!FMath::IsFinite(Action->StaminaCost) || Action->StaminaCost < 0.0f)
+	{
+		OutFailureReason = TEXT("轻攻击 StaminaCost 必须是非负有限数值。");
 		return false;
 	}
 

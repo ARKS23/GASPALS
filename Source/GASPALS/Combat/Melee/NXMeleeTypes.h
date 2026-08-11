@@ -24,6 +24,10 @@ struct GASPALS_API FNXMeleeActionDefinition
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Melee|Action", meta=(ClampMin="0.0", UIMin="0.0"))
 	float BaseDamage = 20.0f;
 
+	/** 执行该动作需要消耗的精力；0 表示免费动作，并保持旧近战资产兼容。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Melee|Action", meta=(ClampMin="0.0", UIMin="0.0"))
+	float StaminaCost = 0.0f;
+
 	/** 播放该动作 Montage 时使用的速率。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Melee|Action", meta=(ClampMin="0.01", UIMin="0.01"))
 	float MontagePlayRate = 1.0f;

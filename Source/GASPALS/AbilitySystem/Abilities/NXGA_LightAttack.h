@@ -1,9 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "Engine/HitResult.h"
+#include "NXCombatGameplayAbility.h"
 #include "NXGA_LightAttack.generated.h"
 
 class ANXMeleeWeapon;
@@ -13,7 +13,7 @@ struct FNXMeleeActionDefinition;
 
 /** 使用当前近战装备执行基础轻攻击，并把动画命中窗口连接到 GAS 伤害链。 */
 UCLASS()
-class GASPALS_API UNXGA_LightAttack : public UGameplayAbility
+class GASPALS_API UNXGA_LightAttack : public UNXCombatGameplayAbility
 {
 	GENERATED_BODY()
 
@@ -30,6 +30,8 @@ protected:
 
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
+	virtual bool TryGetStaminaCost(const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo, float& OutStaminaCost) const override;
 
 private:
 	bool ResolveAttackContext(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
