@@ -1,17 +1,17 @@
-# NexAur 阶段 3：首把近战武器最小闭环（大剑）
+# NexAur 阶段 3：首把近战武器最小闭环
 
 > 上层路线图：[混合战斗 GAS 路线图](../../List/hybrid_combat_gas_roadmap.md)
 >
 > 前置文档：[通用战斗动作与装备契约](../GAS/phase_02_combat_action_equipment_contract.md)、[GAS 属性、伤害与死亡基础](../GAS/gas_vitals_damage_death_foundation.md)
 >
-> 当前状态：开发中；3.1–3.4 已完成，下一步进行大剑编辑器资源与角色输入接入
+> 当前状态：核心功能与三轮回归已通过（2026-08-11）；原计划使用大剑，最终由 Nodachi 资产完成正式验收
 
 ## 1. 目标与边界
 
-本阶段只用现有大剑模型和一条轻攻击动画跑通第一条真实近战链：
+本阶段使用一件正式近战武器和一条轻攻击动画跑通第一条真实近战链。C++ 契约不绑定具体武器类型，当前验收资产为 Nodachi：
 
 ```text
-装备 BP_Greatsword
+装备 BP_Notachi_Melee（当前资产名，后续统一为 BP_Nodachi_Melee）
 -> 动态获得 GA_LightAttack
 -> RequestCombatAction(Combat.Action.Attack.Light)
 -> 播放大剑攻击 Montage
@@ -259,32 +259,32 @@ IA_LightAttack Started
 
 ### 构建与资源
 
-- [ ] UHT、Development Editor 完整编译和链接通过。
-- [ ] 新增 C++ 文件出现在 Rider Solution，关键代码有必要的中文注释。
-- [ ] `BP_PlayerCharacter`、`BP_Greatsword`、AnimBP、Montage 和 DataAsset 无编译错误。
-- [ ] 场景中只有一把可见大剑，Actor Trace Socket 与可见模型一致。
+- [x] UHT、Development Editor 完整编译和链接通过。
+- [x] 新增 C++ 文件出现在 Rider Solution，关键代码有必要的中文注释。
+- [x] `BP_PlayerCharacter`、正式近战 BP、AnimBP、Montage 和 DataAsset 无编译错误。
+- [x] 场景中只有一把可见近战武器，Actor Trace Socket 与可见模型一致。
 
 ### 装备与 Ability
 
-- [ ] 装备大剑后 CurrentEquipment 指向 `BP_Greatsword`，角色没有第二个 Equipment Component。
-- [ ] Light Attack Ability 只在大剑装备期间存在，卸装后 Spec 被移除。
-- [ ] 无武器、枪械装备、死亡或重复攻击时请求会被明确拒绝。
-- [ ] Montage 完成或中断后 `Combat.State.Attacking` 正确移除。
+- [x] 装备 Nodachi 后 CurrentEquipment 指向正式近战 Actor，角色没有第二个 Equipment Component。
+- [x] Light Attack Ability 只在近战武器装备期间存在，卸装后 Spec 被移除。
+- [x] 无武器、枪械装备、死亡或重复攻击时请求会被明确拒绝。
+- [x] Montage 完成或中断后 `Combat.State.Attacking` 正确移除。
 
 ### 命中与伤害
 
-- [ ] 只有 Notify 窗口内的 Sweep 可以命中。
-- [ ] 同一目标在同一窗口只扣一次血，下一次攻击可以再次命中。
-- [ ] 剑刃根部、中段和尖端均能命中，低帧率下没有明显穿透漏判。
-- [ ] 打空、打墙和 Damage Effect 配置错误不会错误扣血。
-- [ ] 伤害通过现有 GAS Vitals 进入 Health、Dead 和 HUD 链。
-- [ ] 攻击中死亡、卸装或销毁武器后没有幽灵命中和残留 Tick。
+- [x] 只有 Notify 窗口内的 Sweep 可以命中。
+- [x] 同一目标在同一窗口只扣一次血，下一次攻击可以再次命中。
+- [x] 剑刃根部、中段和尖端均能命中，低帧率下没有明显穿透漏判。
+- [x] 打空、打墙和 Damage Effect 配置错误不会错误扣血。
+- [x] 伤害通过现有 GAS Vitals 进入 Health、Dead 和 HUD 链。
+- [x] 攻击中死亡、卸装或销毁武器后没有幽灵命中和残留 Tick。
 
 ### 回归
 
-- [ ] Rifle/Pistol 装备、射击、换弹、Overlay 和 WeaponStatus 正常。
-- [ ] 准心、后坐力、Hit Marker、PlayerStatus 和 GASPALS 移动正常。
-- [ ] Output Log 没有重复 Ability、失效委托、无效 Socket 或 Montage 警告。
+- [x] Rifle/Pistol 装备、射击、换弹、Overlay 和 WeaponStatus 正常。
+- [x] 准心、后坐力、Hit Marker、PlayerStatus 和 GASPALS 移动正常。
+- [x] Output Log 没有重复 Ability、失效委托、无效 Socket 或 Montage 警告。
 
 ## 8. 开发顺序与进度
 
@@ -294,7 +294,9 @@ IA_LightAttack Started
 | 3.2 | Equipment Ability 授予/移除与 Actor 表现策略 | 已完成（2026-07-30） |
 | 3.3 | ANXMeleeWeapon 与 Sweep | 已完成（2026-07-30） |
 | 3.4 | GA_LightAttack 与 AnimNotifyState | 已完成（2026-07-30） |
-| 3.5 | BP_Greatsword、Montage、Slot、Overlay 和输入接入 | 待开发 |
-| 3.6 | Standalone 验收、枪械回归与系统文档 | 待测试 |
+| 3.5 | 正式近战 BP、Montage、Slot、Overlay 和输入接入 | 已完成（2026-08-11） |
+| 3.6 | Standalone 验收、枪械回归与系统文档 | 已完成（2026-08-11） |
 
-严格按 `3.1 -> 3.2 -> 3.3 -> 3.4 -> 3.5 -> 3.6` 推进。真实轻攻击完整通过后，再删除 `UNXGA_TestAbility` 和临时 T/Y 测试输入；在此之前保留现有 GAS 冒烟基线。
+阶段 3 已按 `3.1 -> 3.2 -> 3.3 -> 3.4 -> 3.5 -> 3.6` 完成。最终运行调用链见 [近战轻攻击运行调用链](../../system/melee_light_attack_data_flow.md)。
+
+后续收尾项：确认不再需要阶段 1 GAS 冒烟基线后，单独删除 `UNXGA_TestAbility`、`Combat.Action.Test`、`Combat.State.TestAbilityActive` 及临时 T/Y 测试输入；该清理不影响本阶段正式轻攻击链的验收结论。

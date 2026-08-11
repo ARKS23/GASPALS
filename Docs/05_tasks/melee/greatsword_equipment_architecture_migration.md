@@ -2,11 +2,13 @@
 
 > 关联文档：[大剑 GASPALS 基础运动扩展](./greatsword_gaspals_locomotion_extension.md)、[首把近战武器最小闭环](./phase_03_melee_minimum_loop.md)
 >
-> 当前状态：开发中；开发步骤 1–5 已完成，现有 `BP_Greatsword` 仅作为 Overlay 验证原型，不继续增加 Gameplay 逻辑
+> 当前状态：开发步骤 1–8 与三轮回归已完成（2026-08-11）；最终由 Nodachi 资产验证同一套通用近战契约
 
 ## 1. 目标
 
 把当前“使用枪械父类临时显示大剑”的原型迁移为正式近战装备，使枪械和近战共享同一套 Equipment 生命周期，但各自拥有独立的数据、Mesh、输入和战斗实现。
+
+实施说明：架构最初以 Greatsword 为验证对象，最终使用 `BP_Notachi_Melee` 与 `PDA_Melee_Nodachi` 完成正式编辑器接入和回归。两者都遵循 `ANXMeleeWeapon + UNXMeleeWeaponDataAsset` 契约，因此不改变本文的架构结论；`Notachi` 拼写将在后续资产整理时统一为 `Nodachi`。
 
 目标结构：
 
@@ -504,19 +506,19 @@ C++ 工作：
 | 3. 扩展通用 Equipment 生命周期 | 已完成（2026-07-30） |
 | 4. 新增正式 Melee Weapon Actor | 已完成（2026-07-30） |
 | 5. 实现 Light Attack GAS 链 | 已完成（2026-07-30） |
-| 6. 创建正式编辑器资产 | 待开发 |
-| 7. 角色、Overlay 与输入接入 | 待开发 |
-| 8. 替换原型、回归并同步文档 | 待测试 |
+| 6. 创建正式编辑器资产 | 已完成（2026-08-11） |
+| 7. 角色、Overlay 与输入接入 | 已完成（2026-08-11） |
+| 8. 替换原型、回归并同步文档 | 已完成（2026-08-11） |
 
 ## 10. 验收清单
 
-- [ ] `BP_Greatsword` 的原生父类为 `ANXMeleeWeapon`，不再是 `ANXRangedWeapon`。
-- [ ] 大剑不包含弹药、枪口、散布、换弹和射速配置。
-- [ ] 当前装备仍只有一个 `CurrentEquipment`，角色没有新增第二个装备组件。
-- [ ] 大剑 Actor 正确附着，Static Mesh 与 Trace Socket 跟随手部。
-- [ ] 场景中只有一把可见大剑，Overlay 与 Actor 不重复显示。
-- [ ] 大剑不进入 ADS，不显示枪械准心和弹药 HUD。
-- [ ] Rifle/Pistol 仍可瞄准、射击、换弹并使用原有 Skeletal Muzzle 表现。
-- [ ] 空手、大剑、Rifle、Pistol 之间快速切换时 Overlay 和相机状态正确。
-- [ ] 轻攻击完成或中断后 Hit Window、Tick、Ability 和 Montage 全部清理。
-- [ ] 角色死亡和卸装期间没有残留 Sweep、错误射击或失效委托。
+- [x] 正式近战 BP 的原生父类为 `ANXMeleeWeapon`，不再是 `ANXRangedWeapon`。
+- [x] 正式近战武器不包含弹药、枪口、散布、换弹和射速配置。
+- [x] 当前装备仍只有一个 `CurrentEquipment`，角色没有新增第二个装备组件。
+- [x] 近战 Actor 正确附着，Static Mesh 与 Trace Socket 跟随手部。
+- [x] 场景中只有一把可见近战武器，Overlay 与 Actor 不重复显示。
+- [x] 近战武器不进入 ADS，不显示枪械准心和弹药 HUD。
+- [x] Rifle/Pistol 仍可瞄准、射击、换弹并使用原有 Skeletal Muzzle 表现。
+- [x] 空手、Nodachi、Rifle、Pistol 之间快速切换时 Overlay 和相机状态正确。
+- [x] 轻攻击完成或中断后 Hit Window、Tick、Ability 和 Montage 全部清理。
+- [x] 角色死亡和卸装期间没有残留 Sweep、错误射击或失效委托。
