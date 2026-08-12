@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ActiveGameplayEffectHandle.h"
 #include "AbilitySystemInterface.h"
 #include "GameFramework/PlayerState.h"
 #include "NXPlayerState.generated.h"
@@ -53,6 +54,13 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="NexAur|AbilitySystem|Attributes", meta=(AllowPrivateAccess="true"))
 	TSubclassOf<UGameplayEffect> DefaultVitalsEffect;
 
+	/**
+	 * 持续恢复 Stamina 的 Infinite GameplayEffect。
+	 * Effect 由 PlayerState ASC 长期持有，攻击、恢复延迟和死亡状态只负责临时抑制它。
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="NexAur|AbilitySystem|Attributes", meta=(AllowPrivateAccess="true"))
+	TSubclassOf<UGameplayEffect> StaminaRegenerationEffectClass;
+
 	/** 由 PlayerState 蓝图配置，只允许服务端在首次有效初始化时授予。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="NexAur|AbilitySystem", meta=(AllowPrivateAccess="true"))
 	TArray<TSubclassOf<UGameplayAbility>> StartupAbilities;
@@ -60,11 +68,17 @@ private:
 	/** Authority-only 的默认属性初始化流程；Avatar 重绑不会重复应用。 */
 	void InitializeDefaultAttributes();
 
+	/** 默认属性就绪后，Authority 幂等挂载持续精力恢复 Effect。 */
+	void EnsureStaminaRegenerationEffect();
+
 	/** Authority-only 的幂等授予流程。 */
 	void GrantStartupAbilities();
 
 	// 属性初始化和 Ability 授予是两份独立状态，任一流程失败都不应阻塞另一份流程。
 	bool bDefaultAttributesInitialized = false;
+
+	// 保存当前持续恢复 Effect；Handle 失活时允许后续 InitializeAbilitySystem() 重新应用。
+	FActiveGameplayEffectHandle StaminaRegenerationEffectHandle;
 
 	// 该状态只在服务端使用，防止占有或 Avatar 重绑时重复授予永久 Ability。
 	bool bStartupAbilitiesGranted = false;

@@ -58,8 +58,9 @@ void ANXPlayerState::InitializeAbilitySystem(AActor* AvatarActor)
 		*GetNameSafe(this),
 		*GetNameSafe(AvatarActor));
 
-	// Ability 可能依赖 Health 或 Stamina 作为激活条件/Cost，因此先初始化属性，再授予 Ability。
+	// Ability 可能依赖 Health 或 Stamina 作为激活条件/Cost，因此先初始化属性和资源恢复，再授予 Ability。
 	InitializeDefaultAttributes();
+	EnsureStaminaRegenerationEffect();
 	GrantStartupAbilities();
 }
 
@@ -111,6 +112,62 @@ void ANXPlayerState::InitializeDefaultAttributes()
 	bDefaultAttributesInitialized = true;
 	UE_LOG(LogNXPlayerState, Log, TEXT("PlayerState %s 已初始化 GAS 核心属性：Health=%.1f/%.1f，Stamina=%.1f/%.1f。"),
 		*GetNameSafe(this), VitalsAttributeSet->GetHealth(), VitalsAttributeSet->GetMaxHealth(), VitalsAttributeSet->GetStamina(), VitalsAttributeSet->GetMaxStamina());
+}
+
+void ANXPlayerState::EnsureStaminaRegenerationEffect()
+{
+	if (!HasAuthority() || !bDefaultAttributesInitialized)
+	{
+		return;
+	}
+
+	// Handle 在 Effect 被移除后仍会保持 IsValid，因此必须向 ASC 确认它当前仍然活跃。
+	if (StaminaRegenerationEffectHandle.IsValid())
+	{
+		if (AbilitySystemComponent->GetActiveGameplayEffect(StaminaRegenerationEffectHandle))
+		{
+			return;
+		}
+
+		StaminaRegenerationEffectHandle.Invalidate();
+	}
+
+	if (!StaminaRegenerationEffectClass)
+	{
+		UE_LOG(LogNXPlayerState, Warning, TEXT("PlayerState %s 尚未配置 StaminaRegenerationEffectClass，精力不会自动恢复。"), *GetNameSafe(this));
+		return;
+	}
+
+	const UGameplayEffect* RegenerationEffectCDO = StaminaRegenerationEffectClass->GetDefaultObject<UGameplayEffect>();
+	if (!IsValid(RegenerationEffectCDO) || RegenerationEffectCDO->DurationPolicy != EGameplayEffectDurationType::Infinite)
+	{
+		UE_LOG(LogNXPlayerState, Error, TEXT("PlayerState %s 的 StaminaRegenerationEffectClass %s 必须是 Infinite GameplayEffect，已拒绝应用。"),
+			*GetNameSafe(this), *GetNameSafe(StaminaRegenerationEffectClass));
+		return;
+	}
+
+	FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+	EffectContext.AddSourceObject(this);
+
+	const FGameplayEffectSpecHandle EffectSpec = AbilitySystemComponent->MakeOutgoingSpec(StaminaRegenerationEffectClass, 1.0f, EffectContext);
+	if (!EffectSpec.IsValid())
+	{
+		UE_LOG(LogNXPlayerState, Error, TEXT("PlayerState %s 无法为 StaminaRegenerationEffectClass %s 创建 GameplayEffectSpec。"),
+			*GetNameSafe(this), *GetNameSafe(StaminaRegenerationEffectClass));
+		return;
+	}
+
+	const FActiveGameplayEffectHandle AppliedEffect = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*EffectSpec.Data.Get());
+	if (!AppliedEffect.WasSuccessfullyApplied() || !AppliedEffect.IsValid())
+	{
+		UE_LOG(LogNXPlayerState, Error, TEXT("PlayerState %s 应用 StaminaRegenerationEffectClass %s 失败。"),
+			*GetNameSafe(this), *GetNameSafe(StaminaRegenerationEffectClass));
+		return;
+	}
+
+	StaminaRegenerationEffectHandle = AppliedEffect;
+	UE_LOG(LogNXPlayerState, Log, TEXT("PlayerState %s 已挂载持续精力恢复 Effect：%s。"),
+		*GetNameSafe(this), *GetNameSafe(StaminaRegenerationEffectClass));
 }
 
 void ANXPlayerState::GrantStartupAbilities()

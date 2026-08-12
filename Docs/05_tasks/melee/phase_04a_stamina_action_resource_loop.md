@@ -4,7 +4,7 @@
 >
 > 前置文档：[首把近战武器最小闭环](./phase_03_melee_minimum_loop.md)、[GAS 属性、伤害与死亡基础](../GAS/gas_vitals_damage_death_foundation.md)
 >
-> 当前状态：4A.1 与 4A.2 C++ 工作已完成（2026-08-11）；下一步开发 4A.3 PlayerState 持续恢复 Effect 接入
+> 当前状态：4A.1 至 4A.3 C++ 工作已完成（2026-08-12）；下一步创建并接入 GameplayEffect 与 Ability 蓝图资产
 
 ## 1. 目标与边界
 
@@ -237,7 +237,7 @@ RegenRate               = 15 - 25 / s
 |---|---|---|
 | 4A.1 | Native Tags、StaminaCost 字段与 DataAsset 校验 | 已完成（2026-08-11） |
 | 4A.2 | `UNXCombatGameplayAbility` 与 LightAttack Cost 接入 | 已完成（2026-08-11） |
-| 4A.3 | PlayerState 持续恢复 Effect 接入 | 待开发 |
+| 4A.3 | PlayerState 持续恢复 Effect 接入 | 已完成（2026-08-12） |
 | 4A.4 | 创建 GE、GA 蓝图并配置 Nodachi/PlayerState | 待开发 |
 | 4A.5 | 精力、异常生命周期、HUD 和枪械回归 | 待测试 |
 
