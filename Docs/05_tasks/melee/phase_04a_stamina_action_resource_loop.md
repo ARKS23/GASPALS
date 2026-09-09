@@ -4,7 +4,7 @@
 >
 > 前置文档：[首把近战武器最小闭环](./phase_03_melee_minimum_loop.md)、[GAS 属性、伤害与死亡基础](../GAS/gas_vitals_damage_death_foundation.md)
 >
-> 当前状态：4A.1 至 4A.3 C++ 工作已完成（2026-08-12）；下一步创建并接入 GameplayEffect 与 Ability 蓝图资产
+> 当前状态：4A.1 至 4A.4 的 C++ 与编辑器资产接入已完成（2026-09-09）；恢复 GE 的持续生效标签条件已修正，4A.5 完整回归待完成
 
 ## 1. 目标与边界
 
@@ -231,6 +231,32 @@ RecoveryDelay           = 0.6 - 1.0 s
 RegenRate               = 15 - 25 / s
 ```
 
+### 5.4 当前实际接入配置（2026-09-09）
+
+当前资产使用以下路径和数值，名称按编辑器中已保存的资产记录：
+
+| 配置位置 | 当前值 |
+|---|---|
+| Ability 蓝图 | `/Game/AbilitySystem/Ability/GA_LightAttack`，父类为 `UNXGA_LightAttack` |
+| Cost GameplayEffect | `/Game/AbilitySystem/Effect/GE_Stamina_Cost`，Instant，Stamina Add (Base)，SetByCaller=`Data.Cost.Stamina` |
+| 恢复延迟 GameplayEffect | `/Game/AbilitySystem/Effect/GE_Stamina_RecoveryDelay`，2.0 秒，按目标堆叠、上限 1，成功应用刷新持续时间 |
+| 持续恢复 GameplayEffect | `/Game/AbilitySystem/Effect/GE_Stamina_Regon`，Infinite，每 0.1 秒增加 2.0 Stamina，首次应用不立即执行 |
+| `BP_NXPlayerState.StaminaRegenerationEffectClass` | `GE_Stamina_Regon` |
+| `BP_Nodachi_Melee.GrantedAbilityClasses` | `GA_LightAttack` |
+| `PDA_Melee_Nodachi` 轻攻击消耗 | `StaminaCost = 20` |
+
+恢复 GE 的三个阻止标签必须放在 `Ongoing Tag Requirements -> Must Not Have Tags`（`IgnoreTags`）中：
+
+```text
+Combat.State.Attacking
+Combat.State.StaminaRecoveryBlocked
+Combat.State.Dead
+```
+
+`Must Have Tags`（`RequireTags`）保持为空。首次配置误将三个标签放入 `Must Have Tags`，导致 GE 虽然已挂载，但正常状态下一直被抑制；现已通过编辑器属性读取确认修正。
+
+本次已核对关键资产配置，日志确认 PlayerState 成功挂载恢复 GE。完整的消耗、恢复、中断清理、HUD 和枪械回归仍按第 7 节执行，不能仅凭资产配置或挂载日志认定通过。第 7 节的 `100 -> 60 -> 20` 场景使用测试消耗 `40`，执行前需临时调整当前值 `20`。
+
 ## 6. 开发步骤与进度
 
 | 步骤 | 工作内容 | 状态 |
@@ -238,8 +264,8 @@ RegenRate               = 15 - 25 / s
 | 4A.1 | Native Tags、StaminaCost 字段与 DataAsset 校验 | 已完成（2026-08-11） |
 | 4A.2 | `UNXCombatGameplayAbility` 与 LightAttack Cost 接入 | 已完成（2026-08-11） |
 | 4A.3 | PlayerState 持续恢复 Effect 接入 | 已完成（2026-08-12） |
-| 4A.4 | 创建 GE、GA 蓝图并配置 Nodachi/PlayerState | 待开发 |
-| 4A.5 | 精力、异常生命周期、HUD 和枪械回归 | 待测试 |
+| 4A.4 | 创建 GE、GA 蓝图并配置 Nodachi/PlayerState | 已完成（2026-09-09），实际配置见 5.4 |
+| 4A.5 | 精力、异常生命周期、HUD 和枪械回归 | 完整回归待完成 |
 
 严格按 `数据契约 -> Ability 事务 -> 持续恢复 -> 编辑器资产 -> 回归` 推进。C++ 通过完整构建后再打开编辑器创建资源，避免蓝图保存旧反射布局。
 
